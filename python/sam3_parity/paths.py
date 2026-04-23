@@ -31,10 +31,6 @@ def data_root() -> Path:
     return resolve_env_path("SAM3_PARITY_DATA_ROOT", repo_root() / "tests" / "data")
 
 
-def sam3_repo_root() -> Path | None:
-    return resolve_env_path("SAM3_REPO")
-
-
 def sam3_checkpoint_path() -> Path | None:
     return resolve_env_path("SAM3_CHECKPOINT")
 

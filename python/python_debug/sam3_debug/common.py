@@ -1,4 +1,3 @@
-import os
 import sys
 import unittest
 from pathlib import Path
@@ -8,11 +7,14 @@ try:
 except ImportError:
     torch = None
 
-from sam3_parity.paths import repo_root, sam3_repo_root as env_sam3_repo_root
+from sam3_parity.paths import repo_root
+from sam3_parity.upstream import import_sam3_module, import_sam3_symbol
 
 
 REPO_ROOT = repo_root()
 EXAMPLE_SAM3_DIR = REPO_ROOT / "python" / "sam3_parity"
+import_upstream_module = import_sam3_module
+import_upstream_symbol = import_sam3_symbol
 
 
 def ensure_repo_root_on_path() -> None:
@@ -25,15 +27,6 @@ def ensure_example_sam3_on_path() -> None:
     path = str(EXAMPLE_SAM3_DIR)
     if path not in sys.path:
         sys.path.insert(0, path)
-
-
-def sam3_repo_root() -> Path:
-    root = env_sam3_repo_root()
-    if root is None:
-        raise FileNotFoundError("SAM3_REPO is required for Python full parity tests")
-    if not root.exists():
-        raise FileNotFoundError(f"SAM3_REPO does not exist: {root}")
-    return root
 
 
 def require_full_parity_path(path: Path, description: str) -> Path:
@@ -49,20 +42,14 @@ def resolve_metadata_path(base_dir: Path, value: str) -> Path:
     return base_dir / path
 
 
-def add_upstream_sam3_to_path() -> Path:
-    package_dir = sam3_repo_root() / "sam3"
-    parent = str(package_dir.parent)
-    if parent not in sys.path:
-        sys.path.insert(0, parent)
-    return package_dir
-
-
 def apply_cpu_safe_upstream_patches(
     sam3_model_builder,
     transformer_decoder_cls=None,
     sequence_geometry_encoder_cls=None,
 ) -> None:
-    from sam3.model.position_encoding import PositionEmbeddingSine
+    PositionEmbeddingSine = import_sam3_symbol(
+        "sam3.model.position_encoding", "PositionEmbeddingSine"
+    )
 
     def create_cpu_position_encoding(precompute_resolution=None):
         return PositionEmbeddingSine(
@@ -87,6 +74,10 @@ def apply_cpu_safe_upstream_patches(
 
     if sequence_geometry_encoder_cls is not None:
         def encode_boxes_cpu_safe(self, boxes, boxes_mask, boxes_labels, img_feats):
+            box_cxcywh_to_xyxy = import_sam3_symbol(
+                "sam3.model.box_ops", "box_cxcywh_to_xyxy"
+            )
+
             boxes_embed = None
             n_boxes, bs = boxes.shape[:2]
             if self.boxes_direct_project is not None:
@@ -94,7 +85,6 @@ def apply_cpu_safe_upstream_patches(
                 boxes_embed = proj
             if self.boxes_pool_project is not None:
                 import torchvision
-                from sam3.model.box_ops import box_cxcywh_to_xyxy
 
                 H, W = img_feats.shape[-2:]
                 boxes_xyxy = box_cxcywh_to_xyxy(boxes)

@@ -6,23 +6,18 @@ import sys
 from pathlib import Path
 
 try:
-    from sam3_parity.paths import sam3_repo_root
+    from sam3_parity.upstream import import_sam3_symbol
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from sam3_parity.paths import sam3_repo_root
+    from sam3_parity.upstream import import_sam3_symbol
 
 
 def main():
     """Run a single-point position encoding inspection."""
-    sam3_path = sam3_repo_root()
-    if sam3_path is None:
-        raise RuntimeError("SAM3_REPO is required for this debug utility")
-    package_parent = str(Path(sam3_path).expanduser().resolve())
-    if package_parent not in sys.path:
-        sys.path.insert(0, package_parent)
-
     import torch
-    from sam3.model.position_encoding import PositionEmbeddingSine
+    PositionEmbeddingSine = import_sam3_symbol(
+        "sam3.model.position_encoding", "PositionEmbeddingSine"
+    )
 
     # Create position encoder for geometry (not spatial)
     pe = PositionEmbeddingSine(num_pos_feats=256, normalize=True, scale=None, temperature=10000)

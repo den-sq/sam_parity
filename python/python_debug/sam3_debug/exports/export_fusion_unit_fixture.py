@@ -11,16 +11,20 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from python_debug.sam3.common import (
+from python_debug.sam3_debug.common import (
     apply_cpu_safe_upstream_patches,
     ensure_example_sam3_on_path,
+)
+from sam3_parity.upstream import (
+    import_sam3_module,
+    import_sam3_symbol,
+    resolve_default_bpe_path,
 )
 
 ensure_example_sam3_on_path()
 from export_reference import (
     build_preprocessed_image,
     resolve_repo_file,
-    resolve_sam3_package_dir,
     to_cpu_contiguous,
 )
 
@@ -29,7 +33,6 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description="Export an upstream SAM3 fusion-encoder fixture for cross-framework tests."
     )
-    parser.add_argument("--sam3-repo", required=True)
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--image", required=True)
     parser.add_argument("--output-dir", required=True)
@@ -42,25 +45,19 @@ def parse_args():
 def main():
     args = parse_args()
 
-    sam3_package_dir = resolve_sam3_package_dir(Path(args.sam3_repo))
-    sys.path.insert(0, str(sam3_package_dir.parent))
-
     from PIL import Image
     from safetensors.torch import save_file
     from torchvision.transforms import v2
 
-    import sam3.model_builder as sam3_model_builder
-    from sam3.model.decoder import TransformerDecoder
-    from sam3.model.geometry_encoders import SequenceGeometryEncoder
-    from sam3.model.position_encoding import PositionEmbeddingSine
-    from sam3.model.sam3_image_processor import Sam3Processor
+    sam3_model_builder = import_sam3_module("sam3.model_builder")
+    TransformerDecoder = import_sam3_symbol("sam3.model.decoder", "TransformerDecoder")
+    SequenceGeometryEncoder = import_sam3_symbol(
+        "sam3.model.geometry_encoders", "SequenceGeometryEncoder"
+    )
+    Sam3Processor = import_sam3_symbol("sam3.model.sam3_image_processor", "Sam3Processor")
 
     checkpoint_path = resolve_repo_file(args.checkpoint, "sam3.pt").expanduser().resolve()
-    bpe_path = (
-        Path(args.bpe_path).expanduser().resolve()
-        if args.bpe_path is not None
-        else sam3_package_dir / "assets" / "bpe_simple_vocab_16e6.txt.gz"
-    )
+    bpe_path = resolve_default_bpe_path(args.bpe_path)
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 

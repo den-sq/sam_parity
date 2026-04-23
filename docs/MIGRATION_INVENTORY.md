@@ -11,7 +11,7 @@
   - `python_debug/export_geometry_unit_fixture.py`
   - `python_debug/export_decoder_unit_fixture.py`
   - `python_debug/export_segmentation_unit_fixture.py`
-  - `python_debug/sam3/exports/*`
+  - `python_debug/sam3_debug/exports/*`
 
 ## File/Schema Contracts
 
@@ -38,10 +38,13 @@
 ## Environment/Path Contracts
 
 - Path-based Candle dependency root is currently `../candle_sam3`.
-- Existing upstream checkout assumptions in docs/scripts still refer to
-  `/home/dnorthover/extcode/sam3_baseline` and `/home/dnorthover/extcode/hf_sam3`.
-- Existing Python-side fixture utilities historically referenced the old repo via
-  `python_debug.sam3.common`.
+- Current Python parity/export flow expects an installed upstream `sam3` package,
+  plus `$SAM3_CHECKPOINT` for model weights.
+- Optional provenance/pinning for parity runs is recorded via
+  `$SAM3_UPSTREAM_URL` and `$SAM3_UPSTREAM_REF`.
+- Existing Python-side fixture utilities now live under
+  `python_debug.sam3_debug.common` to avoid shadowing the real upstream `sam3`
+  package.
 
 ## Fixture Inventory
 

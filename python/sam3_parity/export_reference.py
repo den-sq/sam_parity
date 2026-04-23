@@ -17,8 +17,13 @@ try:
         bundled_image_path,
         path_for_metadata,
         sam3_checkpoint_path,
-        sam3_repo_root,
         sam3_tokenizer_path,
+    )
+    from sam3_parity.upstream import (
+        import_sam3_module,
+        import_sam3_symbol,
+        installed_sam3_info,
+        resolve_default_bpe_path,
     )
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -26,8 +31,13 @@ except ModuleNotFoundError:
         bundled_image_path,
         path_for_metadata,
         sam3_checkpoint_path,
-        sam3_repo_root,
         sam3_tokenizer_path,
+    )
+    from sam3_parity.upstream import (
+        import_sam3_module,
+        import_sam3_symbol,
+        installed_sam3_info,
+        resolve_default_bpe_path,
     )
 
 
@@ -54,14 +64,25 @@ def parse_args():
         description="Export SAM3 image parity bundles or video reference bundles from upstream PyTorch."
     )
     parser.add_argument(
-        "--sam3-repo",
-        default=str(sam3_repo_root()) if sam3_repo_root() is not None else None,
-        help="Path to the local facebookresearch/sam3 repository root. Defaults to SAM3_REPO.",
-    )
-    parser.add_argument(
         "--checkpoint",
         default=str(sam3_checkpoint_path()) if sam3_checkpoint_path() is not None else None,
         help="Path to sam3.pt or a directory containing sam3.pt. Defaults to SAM3_CHECKPOINT.",
+    )
+    parser.add_argument(
+        "--sam3-source-url",
+        default=None,
+        help=(
+            "Optional source repository URL recorded in bundle metadata. "
+            "Defaults to SAM3_UPSTREAM_URL or the canonical facebookresearch/sam3 URL."
+        ),
+    )
+    parser.add_argument(
+        "--sam3-source-ref",
+        default=None,
+        help=(
+            "Optional git ref or commit recorded in bundle metadata. "
+            "Defaults to SAM3_UPSTREAM_REF when set."
+        ),
     )
     parser.add_argument("--image", default=None, help="Input image path.")
     parser.add_argument(
@@ -163,8 +184,6 @@ def parse_args():
         help="Export internal tensors for the specified ViT block index. Can be passed multiple times.",
     )
     args = parser.parse_args()
-    if args.sam3_repo is None:
-        parser.error("--sam3-repo is required unless SAM3_REPO is set")
     if args.checkpoint is None:
         parser.error("--checkpoint is required unless SAM3_CHECKPOINT is set")
     return args
@@ -173,17 +192,6 @@ def parse_args():
 def resolve_repo_file(path: str, expected: str) -> Path:
     path = Path(path)
     return path / expected if path.is_dir() else path
-
-
-def resolve_sam3_package_dir(path: Path) -> Path:
-    path = path.expanduser().resolve()
-    if (path / "model_builder.py").exists():
-        return path
-    if (path / "sam3" / "model_builder.py").exists():
-        return path / "sam3"
-    raise FileNotFoundError(
-        f"could not find sam3/model_builder.py under {path}; pass either the repo root or the inner sam3 package directory"
-    )
 
 
 def load_video_scenario(path: Path):
@@ -2830,28 +2838,30 @@ def main():
             raise ValueError("`--interactive-script` cannot be combined with `--debug-block`")
         effective_prompt = "visual"
 
-    sam3_package_dir = resolve_sam3_package_dir(Path(args.sam3_repo))
-    sys.path.insert(0, str(sam3_package_dir.parent))
-
     from PIL import Image
     from safetensors.torch import save_file
     import torchvision
     from torchvision.transforms import v2
 
-    import sam3.model_builder as sam3_model_builder
-    from sam3.model.box_ops import box_cxcywh_to_xyxy
-    from sam3.model.decoder import TransformerDecoder
-    from sam3.model.geometry_encoders import SequenceGeometryEncoder
-    from sam3.model.position_encoding import PositionEmbeddingSine
-    from sam3.model.sam3_image_processor import Sam3Processor
-    from sam3.model.vitdet import get_abs_pos, window_partition, window_unpartition
+    sam3_model_builder = import_sam3_module("sam3.model_builder")
+    box_cxcywh_to_xyxy = import_sam3_symbol("sam3.model.box_ops", "box_cxcywh_to_xyxy")
+    TransformerDecoder = import_sam3_symbol("sam3.model.decoder", "TransformerDecoder")
+    SequenceGeometryEncoder = import_sam3_symbol(
+        "sam3.model.geometry_encoders", "SequenceGeometryEncoder"
+    )
+    PositionEmbeddingSine = import_sam3_symbol(
+        "sam3.model.position_encoding", "PositionEmbeddingSine"
+    )
+    Sam3Processor = import_sam3_symbol(
+        "sam3.model.sam3_image_processor", "Sam3Processor"
+    )
+    get_abs_pos = import_sam3_symbol("sam3.model.vitdet", "get_abs_pos")
+    window_partition = import_sam3_symbol("sam3.model.vitdet", "window_partition")
+    window_unpartition = import_sam3_symbol("sam3.model.vitdet", "window_unpartition")
 
     checkpoint_path = resolve_repo_file(args.checkpoint, "sam3.pt").expanduser().resolve()
-    bpe_path = (
-        Path(args.bpe_path).expanduser().resolve()
-        if args.bpe_path is not None
-        else sam3_package_dir / "assets" / "bpe_simple_vocab_16e6.txt.gz"
-    )
+    bpe_path = resolve_default_bpe_path(args.bpe_path)
+    sam3_info = installed_sam3_info(args.sam3_source_url, args.sam3_source_ref)
     script_path = (
         Path(args.interactive_script).expanduser().resolve()
         if args.interactive_script is not None
@@ -2939,7 +2949,7 @@ def main():
 
         from PIL import Image
 
-        from sam3.model_builder import build_sam3_predictor
+        build_sam3_predictor = import_sam3_symbol("sam3.model_builder", "build_sam3_predictor")
 
         source_video_path = Path(args.video).expanduser().resolve()
         frames_dir = output_dir / "frames"
@@ -3133,6 +3143,7 @@ def main():
                 if active_model is not None
                 else capture_predictor_runtime_config(active_tracker, active_tracker)
             ),
+            "sam3_import": sam3_info,
             "checkpoint_path": path_for_metadata(checkpoint_path, output_dir),
             "bpe_path": path_for_metadata(bpe_path, output_dir),
             **engine_metadata,
@@ -3390,6 +3401,7 @@ def main():
             "effective_prompt": effective_prompt,
             "steps": replay_steps,
             "rendered_steps": rendered_steps,
+            "sam3_import": sam3_info,
             "checkpoint_path": path_for_metadata(checkpoint_path, output_dir),
             "bpe_path": path_for_metadata(bpe_path, output_dir),
         }
@@ -3681,6 +3693,7 @@ def main():
         "box_labels": args.box_label if args.box_label else [True for _ in args.box],
         "image_size": args.image_size,
         "preprocess_mode": "exact",
+        "sam3_import": sam3_info,
         "checkpoint_path": path_for_metadata(checkpoint_path, output_dir),
         "bpe_path": path_for_metadata(bpe_path, output_dir),
         "stage_order": stage_order,

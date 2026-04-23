@@ -4,8 +4,8 @@ Last updated: 2026-04-10
 
 ## Current Reference Bundle
 
-- Bundle: `candle-examples/examples/sam3/reference_box_positive_debug_b10_b11`
-- Source: upstream Python export from `/home/dnorthover/extcode/sam3_baseline`
+- Bundle: `tests/reference-bundles/reference_box_positive_debug_b10_b11`
+- Source: upstream Python export from the installed `sam3` package
 - Prompt: exact positive box on `test_image.jpg`
 - Extra debug tensors: `vision.block_debug.10.*`, `vision.block_debug.11.*`
 
@@ -13,16 +13,16 @@ Last updated: 2026-04-10
 
 ### CPU
 
-- Output: `candle-examples/examples/sam3/output/parity_box_positive_cpu_debug_b10_b11`
-- Report: `candle-examples/examples/sam3/output/parity_box_positive_cpu_debug_b10_b11/parity_report.json`
+- Output: `output/parity_box_positive_cpu_debug_b10_b11`
+- Report: `output/parity_box_positive_cpu_debug_b10_b11/parity_report.json`
 - Failure count: `45`
 - First failing trunk stage: `vision.block.8` (`max_abs_diff=0.000144958`)
 - First failing debug stage in bundle order: `vision.block_debug.10.input` (`max_abs_diff=0.000186920`)
 
 ### CPU After Geometry ROIAlign Fix
 
-- Output: `candle-examples/examples/sam3/output/parity_box_positive_cpu_debug_b10_b11_post_geomfix`
-- Report: `candle-examples/examples/sam3/output/parity_box_positive_cpu_debug_b10_b11_post_geomfix/parity_report.json`
+- Output: `output/parity_box_positive_cpu_debug_b10_b11_post_geomfix`
+- Report: `output/parity_box_positive_cpu_debug_b10_b11_post_geomfix/parity_report.json`
 - Failure count: `44`
 - First failing trunk stage: `vision.block.8` (`max_abs_diff=0.000144958`)
 - First failing debug stage in bundle order: `vision.block_debug.10.input` (`max_abs_diff=0.000186920`)
@@ -37,8 +37,8 @@ Last updated: 2026-04-10
 
 ### CPU After Decoder Unit-Test Fixes
 
-- Output: `candle-examples/examples/sam3/output/parity_box_positive_cpu_debug_b10_b11_post_decoderfix`
-- Report: `candle-examples/examples/sam3/output/parity_box_positive_cpu_debug_b10_b11_post_decoderfix/parity_report.json`
+- Output: `output/parity_box_positive_cpu_debug_b10_b11_post_decoderfix`
+- Report: `output/parity_box_positive_cpu_debug_b10_b11_post_decoderfix/parity_report.json`
 - Failure count: `43`
 - First failing trunk stage: `vision.block.8` (`max_abs_diff=0.000144958`)
 - Most important deltas vs the post-geometry CPU run:
@@ -49,8 +49,8 @@ Last updated: 2026-04-10
 
 ### CPU After Segmentation Unit-Test Fixes
 
-- Output: `candle-examples/examples/sam3/output/parity_box_positive_cpu_debug_b10_b11_post_segfix`
-- Report: `candle-examples/examples/sam3/output/parity_box_positive_cpu_debug_b10_b11_post_segfix/parity_report.json`
+- Output: `output/parity_box_positive_cpu_debug_b10_b11_post_segfix`
+- Report: `output/parity_box_positive_cpu_debug_b10_b11_post_segfix/parity_report.json`
 - Failure count: `43`
 - First failing trunk stage: `vision.block.8` (`max_abs_diff=0.000144958`)
 - Most important deltas vs the post-decoder CPU run:
@@ -62,8 +62,8 @@ Last updated: 2026-04-10
 
 ### CUDA
 
-- Output: `candle-examples/examples/sam3/output/parity_box_positive_cuda_debug_b10_b11`
-- Report: `candle-examples/examples/sam3/output/parity_box_positive_cuda_debug_b10_b11/parity_report.json`
+- Output: `output/parity_box_positive_cuda_debug_b10_b11`
+- Report: `output/parity_box_positive_cuda_debug_b10_b11/parity_report.json`
 - Failure count: `50`
 - First failing trunk stage: `vision.block.7` (`max_abs_diff=0.000102997`)
 - First failing debug stage in bundle order: `vision.block_debug.10.input` (`max_abs_diff=0.000473022`)
@@ -102,8 +102,8 @@ After the ROIAlign fix, the geometry conclusion changed materially:
 
 ## Earlier Trunk Localization
 
-- Bundle: `candle-examples/examples/sam3/reference_box_positive_debug_b8_b9`
-- CPU report: `candle-examples/examples/sam3/output/parity_box_positive_cpu_debug_b8_b9/parity_report.json`
+- Bundle: `tests/reference-bundles/reference_box_positive_debug_b8_b9`
+- CPU report: `output/parity_box_positive_cpu_debug_b8_b9/parity_report.json`
 
 Key result:
 
@@ -127,7 +127,7 @@ Interpretation:
 ## Targeted Geometry Tests
 
 - Fixture generator: `python_debug/export_geometry_unit_fixture.py`
-- Fixture dir: `candle-transformers/tests/data/sam3_geometry_unit`
+- Fixture dir: `tests/data/sam3_geometry_unit`
 - Investigation tests live in `candle-transformers/src/models/sam3/geometry.rs`
 - The new fixture tests are `#[ignore]` so they can be run explicitly while parity work is in progress.
 
@@ -168,7 +168,7 @@ Conclusion from targeted tests:
 ## Targeted Decoder Tests
 
 - Fixture generator: `python_debug/export_decoder_unit_fixture.py`
-- Fixture dir: `candle-transformers/tests/data/sam3_decoder_unit`
+- Fixture dir: `tests/data/sam3_decoder_unit`
 - Investigation tests live in `candle-transformers/src/models/sam3/decoder.rs`
 - The new fixture tests are `#[ignore]` so they can be run explicitly while parity work is in progress.
 
@@ -215,7 +215,7 @@ Conclusion from targeted decoder tests:
 ## Targeted Segmentation Tests
 
 - Fixture generator: `python_debug/export_segmentation_unit_fixture.py`
-- Fixture dir: `candle-transformers/tests/data/sam3_segmentation_unit`
+- Fixture dir: `tests/data/sam3_segmentation_unit`
 - Investigation tests live in `candle-transformers/src/models/sam3/segmentation.rs`
 - The new fixture tests are `#[ignore]` so they can be run explicitly while parity work is in progress.
 

@@ -9,15 +9,16 @@ import torch
 import torch.nn.functional as F
 from safetensors.torch import save_file
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from sam3_parity.upstream import import_sam3_symbol
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Export tiny SAM3 geometry fixtures for cross-framework unit tests."
-    )
-    parser.add_argument(
-        "--sam3-repo",
-        required=True,
-        help="Path to the local facebookresearch/sam3 repository root or inner sam3 package.",
     )
     parser.add_argument(
         "--output-dir",
@@ -25,18 +26,6 @@ def parse_args():
         help="Directory where fixture.safetensors, weights.safetensors, and metadata.json will be written.",
     )
     return parser.parse_args()
-
-
-def resolve_sam3_package_dir(path: Path) -> Path:
-    path = path.expanduser().resolve()
-    if (path / "model_builder.py").exists():
-        return path
-    if (path / "sam3" / "model_builder.py").exists():
-        return path / "sam3"
-    raise FileNotFoundError(
-        f"could not find sam3/model_builder.py under {path};"
-        "pass either the repo root or the inner sam3 package directory"
-    )
 
 
 def to_cpu(tensor: torch.Tensor) -> torch.Tensor:
@@ -337,14 +326,20 @@ def run_geometry_with_debug(encoder, geo_prompt, img_feats, img_sizes, img_pos_e
 
 def main():
     args = parse_args()
-    sam3_package_dir = resolve_sam3_package_dir(Path(args.sam3_repo))
-    sys.path.insert(0, str(sam3_package_dir.parent))
-
-    from sam3.model.box_ops import box_cxcywh_to_xyxy
-    from sam3.model.encoder import TransformerEncoderLayer
-    from sam3.model.geometry_encoders import Prompt, SequenceGeometryEncoder
-    from sam3.model.model_misc import MultiheadAttentionWrapper as MultiheadAttention
-    from sam3.model.position_encoding import PositionEmbeddingSine
+    box_cxcywh_to_xyxy = import_sam3_symbol("sam3.model.box_ops", "box_cxcywh_to_xyxy")
+    TransformerEncoderLayer = import_sam3_symbol(
+        "sam3.model.encoder", "TransformerEncoderLayer"
+    )
+    Prompt = import_sam3_symbol("sam3.model.geometry_encoders", "Prompt")
+    SequenceGeometryEncoder = import_sam3_symbol(
+        "sam3.model.geometry_encoders", "SequenceGeometryEncoder"
+    )
+    MultiheadAttention = import_sam3_symbol(
+        "sam3.model.model_misc", "MultiheadAttentionWrapper"
+    )
+    PositionEmbeddingSine = import_sam3_symbol(
+        "sam3.model.position_encoding", "PositionEmbeddingSine"
+    )
 
     torch.manual_seed(1234)
     device = torch.device("cpu")

@@ -66,9 +66,14 @@ def parse_args():
         help="Python executable used to invoke export_reference.py.",
     )
     parser.add_argument(
-        "--sam3-repo",
-        default=os.environ.get("SAM3_REPO"),
-        help="Path to the upstream SAM3 repository. Defaults to SAM3_REPO.",
+        "--sam3-source-url",
+        default=os.environ.get("SAM3_UPSTREAM_URL"),
+        help="Optional source repository URL recorded in generated bundle metadata.",
+    )
+    parser.add_argument(
+        "--sam3-source-ref",
+        default=os.environ.get("SAM3_UPSTREAM_REF"),
+        help="Optional git ref or commit recorded in generated bundle metadata.",
     )
     parser.add_argument(
         "--checkpoint",
@@ -164,8 +169,6 @@ def build_export_command(args, bundle, scenario_path: Path, frame_count: int):
     cmd = [
         args.python,
         args.export_script,
-        "--sam3-repo",
-        args.sam3_repo,
         "--checkpoint",
         args.checkpoint,
         "--video",
@@ -178,13 +181,17 @@ def build_export_command(args, bundle, scenario_path: Path, frame_count: int):
         "--output-dir",
         str(output_dir),
     ]
+    if args.sam3_source_url:
+        cmd.extend(["--sam3-source-url", args.sam3_source_url])
+    if args.sam3_source_ref:
+        cmd.extend(["--sam3-source-ref", args.sam3_source_ref])
     return cmd
 
 
 def run_exports(args, bundles, frame_count: int):
     missing = [
         flag
-        for flag in ("sam3_repo", "checkpoint", "video")
+        for flag in ("checkpoint", "video")
         if getattr(args, flag) is None
     ]
     if missing:

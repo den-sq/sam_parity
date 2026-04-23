@@ -5,23 +5,16 @@ import sys
 from pathlib import Path
 
 try:
-    from sam3_parity.paths import sam3_repo_root
+    from sam3_parity.upstream import import_sam3_symbol
 except ModuleNotFoundError:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from sam3_parity.paths import sam3_repo_root
+    from sam3_parity.upstream import import_sam3_symbol
 
 
 def debug_geometry_encoder():
     """Test the geometry encoder with simple inputs."""
-    sam3_path = sam3_repo_root()
-    if sam3_path is None:
-        raise RuntimeError("SAM3_REPO is required for this debug utility")
-    package_parent = str(Path(sam3_path).expanduser().resolve())
-    if package_parent not in sys.path:
-        sys.path.insert(0, package_parent)
-
     import torch
-    from sam3.model_builder import build_sam3_image_model
+    build_sam3_image_model = import_sam3_symbol("sam3.model_builder", "build_sam3_image_model")
 
     # Build model
     model = build_sam3_image_model(model_cfg="vit_h")
