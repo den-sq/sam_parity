@@ -638,6 +638,8 @@ mod tests {
         ImageConfig, NeckConfig, Sam3ImageModel, SegmentationConfig, TextConfig, VisionConfig,
     };
 
+    use crate::paths;
+
     fn unique_temp_dir(label: &str) -> std::path::PathBuf {
         std::env::temp_dir().join(format!(
             "sam3_interactive_{label}_{}_{}",
@@ -731,8 +733,7 @@ mod tests {
     }
 
     fn checked_in_manifest_path() -> std::path::PathBuf {
-        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("examples/sam3/interactive_replay.example.json")
+        paths::repo_root().join("examples/sam3/interactive_replay.example.json")
     }
 
     #[test]

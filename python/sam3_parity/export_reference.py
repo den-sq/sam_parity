@@ -12,6 +12,24 @@ from pathlib import Path
 
 import torch
 
+try:
+    from sam3_parity.paths import (
+        bundled_image_path,
+        path_for_metadata,
+        sam3_checkpoint_path,
+        sam3_repo_root,
+        sam3_tokenizer_path,
+    )
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from sam3_parity.paths import (
+        bundled_image_path,
+        path_for_metadata,
+        sam3_checkpoint_path,
+        sam3_repo_root,
+        sam3_tokenizer_path,
+    )
+
 
 def parse_args():
     def parse_box(value: str):
@@ -37,13 +55,13 @@ def parse_args():
     )
     parser.add_argument(
         "--sam3-repo",
-        required=True,
-        help="Path to the local facebookresearch/sam3 repository root.",
+        default=str(sam3_repo_root()) if sam3_repo_root() is not None else None,
+        help="Path to the local facebookresearch/sam3 repository root. Defaults to SAM3_REPO.",
     )
     parser.add_argument(
         "--checkpoint",
-        required=True,
-        help="Path to sam3.pt or a directory containing sam3.pt.",
+        default=str(sam3_checkpoint_path()) if sam3_checkpoint_path() is not None else None,
+        help="Path to sam3.pt or a directory containing sam3.pt. Defaults to SAM3_CHECKPOINT.",
     )
     parser.add_argument("--image", default=None, help="Input image path.")
     parser.add_argument(
@@ -85,6 +103,11 @@ def parse_args():
         "--bpe-path",
         default=None,
         help="Optional path to bpe_simple_vocab_16e6.txt.gz. Defaults to <sam3-repo>/assets/.",
+    )
+    parser.add_argument(
+        "--tokenizer",
+        default=str(sam3_tokenizer_path()) if sam3_tokenizer_path() is not None else None,
+        help="Optional tokenizer.json path recorded for video bundles. Defaults to SAM3_TOKENIZER.",
     )
     parser.add_argument(
         "--image-size",
@@ -139,7 +162,12 @@ def parse_args():
         default=[],
         help="Export internal tensors for the specified ViT block index. Can be passed multiple times.",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.sam3_repo is None:
+        parser.error("--sam3-repo is required unless SAM3_REPO is set")
+    if args.checkpoint is None:
+        parser.error("--checkpoint is required unless SAM3_CHECKPOINT is set")
+    return args
 
 
 def resolve_repo_file(path: str, expected: str) -> Path:
@@ -689,11 +717,13 @@ def render_interactive_reference_step(
         "accumulated_points_xy_normalized": accumulated_points,
         "accumulated_point_labels": accumulated_point_labels,
         "render_image_size": {"width": image.width, "height": image.height},
-        "base_path": str(base_path),
-        "overlay_path": str(overlay_path),
-        "prediction_overlay_path": str(prediction_overlay_path),
-        "prediction_overlay_all_kept_path": str(prediction_overlay_all_kept_path),
-        "mask_path": str(mask_path),
+        "base_path": path_for_metadata(base_path, output_dir),
+        "overlay_path": path_for_metadata(overlay_path, output_dir),
+        "prediction_overlay_path": path_for_metadata(prediction_overlay_path, output_dir),
+        "prediction_overlay_all_kept_path": path_for_metadata(
+            prediction_overlay_all_kept_path, output_dir
+        ),
+        "mask_path": path_for_metadata(mask_path, output_dir),
         "kept_queries_debug": kept_queries_debug,
         "mask_mean_probability": float(raw_mask_probs.mean()),
     }
@@ -718,7 +748,11 @@ def sorted_frame_paths(dir_path: Path):
     return frame_paths
 
 
-def resolve_tokenizer_path(checkpoint_path: Path):
+def resolve_tokenizer_path(checkpoint_path: Path, explicit_tokenizer_path: str | None = None):
+    if explicit_tokenizer_path is not None:
+        candidate = Path(explicit_tokenizer_path).expanduser().resolve(strict=False)
+        if candidate.exists():
+            return candidate
     if checkpoint_path.is_dir():
         candidate = checkpoint_path / "tokenizer.json"
         if candidate.exists():
@@ -728,6 +762,12 @@ def resolve_tokenizer_path(checkpoint_path: Path):
         if candidate.exists():
             return candidate.resolve()
     return None
+
+
+def save_bundled_input_image(image, input_path: str, output_dir: Path) -> str:
+    image_path = bundled_image_path(input_path, output_dir)
+    image.save(image_path, format="PNG")
+    return path_for_metadata(image_path, output_dir)
 
 
 def prepare_video_frames(video_path: Path, frames_dir: Path, max_frames: int):
@@ -3064,20 +3104,17 @@ def main():
                 )
             )
 
+        tokenizer_path = resolve_tokenizer_path(checkpoint_path, args.tokenizer)
         metadata = {
             "bundle_version": 1,
             "mode": "video_reference",
             "engine": scenario["engine"],
-            "source_path": str(source_video_path),
+            "source_path": path_for_metadata(source_video_path, output_dir),
             "source_kind": "video_file" if source_video_path.is_file() else "image_folder",
             "session_frame_count": len(frame_paths),
             "exported_frame_count": len(results),
             "frame_stride": 1,
-            "tokenizer_path": (
-                str(resolve_tokenizer_path(checkpoint_path))
-                if resolve_tokenizer_path(checkpoint_path) is not None
-                else None
-            ),
+            "tokenizer_path": path_for_metadata(tokenizer_path, output_dir),
             "prompt_text": args.prompt if args.video_scenario is None else None,
             "points_xy_normalized": [],
             "point_labels": [],
@@ -3096,8 +3133,8 @@ def main():
                 if active_model is not None
                 else capture_predictor_runtime_config(active_tracker, active_tracker)
             ),
-            "checkpoint_path": str(checkpoint_path),
-            "bpe_path": str(bpe_path),
+            "checkpoint_path": path_for_metadata(checkpoint_path, output_dir),
+            "bpe_path": path_for_metadata(bpe_path, output_dir),
             **engine_metadata,
         }
         with open(output_dir / "video_results.json", "w", encoding="utf-8") as f:
@@ -3342,18 +3379,19 @@ def main():
             str(output_dir / "reference.safetensors"),
             metadata={"bundle_version": "1"},
         )
+        image_path_for_metadata = save_bundled_input_image(image, args.image, output_dir)
         metadata = {
             "bundle_version": 1,
             "mode": "interactive_reference",
-            "image_path": str(Path(args.image).expanduser().resolve()),
+            "image_path": image_path_for_metadata,
             "image_size": args.image_size,
             "preprocess_mode": "exact",
-            "replay_script_path": str(script_path),
+            "replay_script_path": path_for_metadata(script_path, output_dir),
             "effective_prompt": effective_prompt,
             "steps": replay_steps,
             "rendered_steps": rendered_steps,
-            "checkpoint_path": str(checkpoint_path),
-            "bpe_path": str(bpe_path),
+            "checkpoint_path": path_for_metadata(checkpoint_path, output_dir),
+            "bpe_path": path_for_metadata(bpe_path, output_dir),
         }
         with open(output_dir / "reference.json", "w", encoding="utf-8") as f:
             json.dump(metadata, f, indent=2)
@@ -3633,17 +3671,18 @@ def main():
         str(output_dir / "reference.safetensors"),
         metadata={"bundle_version": "1"},
     )
+    image_path_for_metadata = save_bundled_input_image(image, args.image, output_dir)
     metadata = {
         "bundle_version": 1,
-        "image_path": str(Path(args.image).expanduser().resolve()),
+        "image_path": image_path_for_metadata,
         "prompt": args.prompt,
         "effective_prompt": effective_prompt,
         "boxes_cxcywh": args.box,
         "box_labels": args.box_label if args.box_label else [True for _ in args.box],
         "image_size": args.image_size,
         "preprocess_mode": "exact",
-        "checkpoint_path": str(checkpoint_path),
-        "bpe_path": str(bpe_path),
+        "checkpoint_path": path_for_metadata(checkpoint_path, output_dir),
+        "bpe_path": path_for_metadata(bpe_path, output_dir),
         "stage_order": stage_order,
     }
     with open(output_dir / "reference.json", "w", encoding="utf-8") as f:

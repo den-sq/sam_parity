@@ -4,15 +4,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+try:
+    from sam3_parity.paths import bundle_root, repo_root
+except ModuleNotFoundError:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from sam3_parity.paths import bundle_root, repo_root
+
+REPO_ROOT = repo_root()
 DEFAULT_MATRIX_PATH = REPO_ROOT / "docs" / "video_tracker_strict_port_matrix.json"
-DEFAULT_OUTPUT_ROOT = REPO_ROOT / "output" / "strict_port_reference_matrix"
+DEFAULT_OUTPUT_ROOT = bundle_root()
 DEFAULT_EXPORT_SCRIPT = REPO_ROOT / "python" / "sam3_parity" / "export_reference.py"
 
 
@@ -58,8 +65,16 @@ def parse_args():
         default=sys.executable,
         help="Python executable used to invoke export_reference.py.",
     )
-    parser.add_argument("--sam3-repo", help="Path to the upstream SAM3 repository.")
-    parser.add_argument("--checkpoint", help="Path to the SAM3 checkpoint.")
+    parser.add_argument(
+        "--sam3-repo",
+        default=os.environ.get("SAM3_REPO"),
+        help="Path to the upstream SAM3 repository. Defaults to SAM3_REPO.",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        default=os.environ.get("SAM3_CHECKPOINT"),
+        help="Path to the SAM3 checkpoint. Defaults to SAM3_CHECKPOINT.",
+    )
     parser.add_argument(
         "--video",
         help="Input video path or extracted-frame directory passed to export_reference.py.",
@@ -117,6 +132,7 @@ def list_bundles(bundles):
             flags.append("required-if-reachable")
         flag_text = ", ".join(flags) if flags else "optional"
         print(f"{bundle['name']} [{flag_text}]")
+        print(f"  artifact_dir: {artifact_dir_name(bundle)}")
         print(f"  {bundle.get('description', '')}")
         covers = bundle.get("covers", [])
         if covers:
@@ -134,8 +150,17 @@ def emit_scenarios(bundles, output_dir: Path):
         print(scenario_path)
 
 
+def artifact_dir_name(bundle) -> str:
+    if bundle.get("artifact_dir"):
+        return bundle["artifact_dir"]
+    name = bundle["name"]
+    if name.endswith("_default"):
+        name = name[: -len("_default")]
+    return f"reference_{name}"
+
+
 def build_export_command(args, bundle, scenario_path: Path, frame_count: int):
-    output_dir = Path(args.output_root) / bundle["name"]
+    output_dir = Path(args.output_root) / artifact_dir_name(bundle)
     cmd = [
         args.python,
         args.export_script,

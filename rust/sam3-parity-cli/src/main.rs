@@ -8,7 +8,11 @@ mod comparison;
 mod interactive;
 mod interactive_compare;
 mod parity;
+mod paths;
 mod video;
+
+#[cfg(all(test, feature = "full-parity"))]
+mod full_parity;
 
 use anyhow::{bail, Context, Error as E, Result};
 use clap::Parser;
@@ -1575,8 +1579,7 @@ fn image_predictor_example_jobs() -> Vec<BatchJob> {
     vec![
         BatchJob {
             name: Some("image_predictor_text_shoe".to_string()),
-            image: "/home/dnorthover/extcode/sam3_baseline/assets/images/test_image.jpg"
-                .to_string(),
+            image: paths::example_asset("examples/assets/images/test_image.jpg"),
             prompt: Some("shoe".to_string()),
             smoke_image_size: None,
             points: vec![],
@@ -1584,8 +1587,7 @@ fn image_predictor_example_jobs() -> Vec<BatchJob> {
         },
         BatchJob {
             name: Some("image_predictor_single_positive_box".to_string()),
-            image: "/home/dnorthover/extcode/sam3_baseline/assets/images/test_image.jpg"
-                .to_string(),
+            image: paths::example_asset("examples/assets/images/test_image.jpg"),
             prompt: None,
             smoke_image_size: None,
             points: vec![],
@@ -1599,8 +1601,7 @@ fn image_predictor_example_jobs() -> Vec<BatchJob> {
         },
         BatchJob {
             name: Some("image_predictor_positive_negative_boxes".to_string()),
-            image: "/home/dnorthover/extcode/sam3_baseline/assets/images/test_image.jpg"
-                .to_string(),
+            image: paths::example_asset("examples/assets/images/test_image.jpg"),
             prompt: None,
             smoke_image_size: None,
             points: vec![],
@@ -1854,7 +1855,16 @@ fn run_reference_comparison(
     output_dir: &Path,
     device: &Device,
 ) -> Result<()> {
-    let bundle = parity::ParityBundle::load(Path::new(bundle_path))?;
+    let bundle_arg = Path::new(bundle_path);
+    let bundle_root = if bundle_arg.is_dir() {
+        bundle_arg.to_path_buf()
+    } else {
+        bundle_arg
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."))
+    };
+    let bundle = parity::ParityBundle::load(bundle_arg)?;
     let reference_prediction_overlay_all_kept_path =
         resolve_reference_render_path(bundle_path, "prediction_overlay_all_kept.png");
     let reference_prediction_overlay_all_kept =
@@ -1867,11 +1877,13 @@ fn run_reference_comparison(
         } else {
             None
         };
-    let image_path = bundle
+    let image_path_metadata = bundle
         .metadata
         .image_path
         .as_deref()
         .context("reference comparison requires `image_path` in reference bundle metadata")?;
+    let image_path_buf = paths::resolve_metadata_path(&bundle_root, image_path_metadata);
+    let image_path = image_path_buf.to_string_lossy().into_owned();
     let image_size = bundle
         .metadata
         .image_size
@@ -1918,7 +1930,7 @@ fn run_reference_comparison(
         bundle.tensor_opt("decoder.presence_logits"),
     )?;
     let reference_selected = select_prediction_from_xyxy_tensors(
-        image_path,
+        &image_path,
         image_size,
         bundle.tensor("decoder.pred_boxes_xyxy")?,
         bundle.tensor("segmentation.mask_logits")?,
@@ -1927,7 +1939,7 @@ fn run_reference_comparison(
 
     let candle_selected = run_vision_and_geometry(
         model,
-        image_path,
+        &image_path,
         Some(image_size),
         output_dir,
         text_prompt_for_render,
@@ -2252,8 +2264,7 @@ mod tests {
     }
 
     fn interactive_visual_fixture_dir() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../candle-transformers/tests/data/sam3_interactive_visual_seed")
+        crate::paths::resolve_data_dir("sam3_interactive_visual_seed")
     }
 
     fn assert_tensor_close(
@@ -2419,7 +2430,13 @@ fn run_image_predictor_example(
 }
 
 pub fn main() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    if args.checkpoint.is_none() {
+        args.checkpoint = paths::env_path_string("SAM3_CHECKPOINT");
+    }
+    if args.tokenizer.is_none() {
+        args.tokenizer = paths::env_path_string("SAM3_TOKENIZER");
+    }
     let device = candle_examples::device(args.cpu)?;
     let config = sam3::Config::default();
     let checkpoint_source = args
@@ -2545,12 +2562,13 @@ pub fn main() -> anyhow::Result<()> {
     };
 
     if let Some(bundle_path) = args.parity_bundle.as_deref() {
+        let bundle_path = paths::resolve_bundle_arg(bundle_path);
         parity::run(
             model
                 .as_ref()
                 .context("SAM3 parity mode requires `--checkpoint <sam3.pt>`")?,
             &parity::ParityOptions {
-                bundle_path: PathBuf::from(bundle_path),
+                bundle_path,
                 output_dir: PathBuf::from(&args.output_dir),
                 atol: args.parity_atol,
             },
@@ -2560,17 +2578,19 @@ pub fn main() -> anyhow::Result<()> {
     }
 
     if let Some(bundle_path) = args.compare_reference_bundle.as_deref() {
-        if interactive_compare::is_interactive_reference_bundle(Path::new(bundle_path))? {
+        let bundle_path = paths::resolve_bundle_arg(bundle_path);
+        let bundle_path_string = bundle_path.to_string_lossy().into_owned();
+        if interactive_compare::is_interactive_reference_bundle(&bundle_path)? {
             interactive_compare::run_interactive_reference_comparison(
                 model.as_ref().context(
                     "SAM3 interactive reference comparison mode requires `--checkpoint <sam3.pt>`",
                 )?,
-                bundle_path,
+                &bundle_path_string,
                 Path::new(&args.output_dir),
                 &device,
                 args.parity_atol,
             )?;
-        } else if video::is_video_reference_bundle(Path::new(bundle_path))? {
+        } else if video::is_video_reference_bundle(&bundle_path)? {
             let checkpoint = checkpoint_source.as_ref().context(
                 "SAM3 video reference comparison mode requires `--checkpoint <sam3.pt>`",
             )?;
@@ -2585,7 +2605,7 @@ pub fn main() -> anyhow::Result<()> {
                     "SAM3 video reference comparison mode requires `--checkpoint <sam3.pt>`",
                 )?,
                 &tracker,
-                bundle_path,
+                &bundle_path_string,
                 Path::new(&args.output_dir),
                 &device,
                 args.video_debug_bundle,
@@ -2597,7 +2617,7 @@ pub fn main() -> anyhow::Result<()> {
                 model
                     .as_ref()
                     .context("SAM3 reference comparison mode requires `--checkpoint <sam3.pt>`")?,
-                bundle_path,
+                &bundle_path_string,
                 Path::new(&args.output_dir),
                 &device,
             )?;
@@ -2606,11 +2626,13 @@ pub fn main() -> anyhow::Result<()> {
     }
 
     if let Some(bundle_path) = args.compare_interactive_reference.as_deref() {
+        let bundle_path = paths::resolve_bundle_arg(bundle_path);
+        let bundle_path_string = bundle_path.to_string_lossy().into_owned();
         interactive_compare::run_interactive_reference_comparison(
             model.as_ref().context(
                 "SAM3 interactive reference comparison mode requires `--checkpoint <sam3.pt>`",
             )?,
-            bundle_path,
+            &bundle_path_string,
             Path::new(&args.output_dir),
             &device,
             args.parity_atol,

@@ -14,6 +14,11 @@ dependencies = [
     "torchvision",
 ]
 
+[project.scripts]
+sam3-export-reference = "sam3_parity.export_reference:main"
+sam3-generate-video-matrix = "sam3_parity.generate_video_tracker_strict_port_matrix:main"
+sam3-validate-bundles = "sam3_parity.validate_bundles:main"
+
 [tool.setuptools]
 package-dir = {"" = "."}
 
@@ -21,3 +26,7 @@ package-dir = {"" = "."}
 where = ["."]
 include = ["sam3_parity*", "python_debug*"]
 
+[tool.pytest.ini_options]
+markers = [
+    "full_parity: tests that require upstream SAM3, checkpoint files, and generated parity fixtures",
+]

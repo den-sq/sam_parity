@@ -21,6 +21,7 @@ tokenizers = { version = "0.22.0", default-features = false, features = ["onig"]
 
 [features]
 default = []
+full-parity = []
 accelerate = [
     "dep:accelerate-src",
     "candle/accelerate",

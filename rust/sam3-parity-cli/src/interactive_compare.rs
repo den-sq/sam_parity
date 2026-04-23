@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::comparison;
 use crate::interactive::InteractiveReplayStep;
+use crate::paths;
 
 const REFERENCE_TENSORS_FILE: &str = "reference.safetensors";
 const REFERENCE_METADATA_FILE: &str = "reference.json";
@@ -343,7 +344,8 @@ pub fn run_interactive_reference_comparison(
     atol: f32,
 ) -> Result<()> {
     println!("loading interactive reference bundle from {bundle_path}");
-    let bundle = InteractiveReferenceBundle::load(Path::new(bundle_path))?;
+    let bundle_root = Path::new(bundle_path);
+    let bundle = InteractiveReferenceBundle::load(bundle_root)?;
     fs::create_dir_all(output_dir)?;
     let image_size = bundle
         .metadata
@@ -365,7 +367,9 @@ pub fn run_interactive_reference_comparison(
         "preprocessing reference image {}",
         bundle.metadata.image_path
     );
-    let image = crate::preprocess_image_path_exact(&bundle.metadata.image_path, model, device)?;
+    let image_path = paths::resolve_metadata_path(bundle_root, &bundle.metadata.image_path);
+    let image_path_string = image_path.to_string_lossy().into_owned();
+    let image = crate::preprocess_image_path_exact(&image_path_string, model, device)?;
     let replay_steps = interactive_replay_steps_from_metadata(&bundle.metadata.steps)?;
     println!(
         "loaded {} interactive replay step(s) for direct comparison",
@@ -389,7 +393,7 @@ pub fn run_interactive_reference_comparison(
             .unwrap_or_else(|| format!("step_{step_idx:02}"));
         let step_output_dir = step_output_dir(output_dir, step_idx, &step_name);
         let candle_selected = crate::save_render_outputs_from_xyxy_tensors(
-            &bundle.metadata.image_path,
+            &image_path_string,
             image_size,
             &step_output_dir,
             &step_name,
@@ -462,7 +466,7 @@ pub fn run_interactive_reference_comparison(
             bundle.tensor_opt(&format!("step.{step_idx}.decoder.presence_logits")),
         )?;
         let reference_selected = crate::select_prediction_from_xyxy_tensors(
-            &bundle.metadata.image_path,
+            &image_path_string,
             image_size,
             bundle.tensor(&format!("step.{step_idx}.decoder.pred_boxes_xyxy"))?,
             bundle.tensor(&format!("step.{step_idx}.segmentation.mask_logits"))?,
@@ -531,7 +535,7 @@ pub fn run_interactive_reference_comparison(
 
         let partial_report = InteractiveComparisonReport {
             bundle_version: bundle.metadata.bundle_version,
-            image_path: bundle.metadata.image_path.clone(),
+            image_path: image_path_string.clone(),
             image_size,
             preprocess_mode: preprocess_mode.to_string(),
             replay_script_path: bundle.metadata.replay_script_path.clone(),
@@ -545,7 +549,7 @@ pub fn run_interactive_reference_comparison(
 
     let report = InteractiveComparisonReport {
         bundle_version: bundle.metadata.bundle_version,
-        image_path: bundle.metadata.image_path.clone(),
+        image_path: image_path_string,
         image_size,
         preprocess_mode: preprocess_mode.to_string(),
         replay_script_path: bundle.metadata.replay_script_path.clone(),
@@ -599,6 +603,8 @@ mod tests {
     use anyhow::{Context, Result};
     use candle::{DType, Device};
     use candle_transformers::models::sam3::{self, Sam3CheckpointSource};
+
+    use crate::paths;
 
     use super::{
         accumulated_points_from_step, compare_tensor, is_interactive_reference_bundle,
@@ -696,12 +702,17 @@ mod tests {
         Device,
     )> {
         let device = Device::Cpu;
-        let bundle = InteractiveReferenceBundle::load(&reference_bundle_dir())?;
+        let bundle_dir = reference_bundle_dir();
+        let bundle = InteractiveReferenceBundle::load(&bundle_dir)?;
         let checkpoint_path = bundle
             .metadata
             .checkpoint_path
             .as_deref()
-            .context("interactive reference metadata is missing checkpoint_path")?;
+            .map(|path| paths::resolve_metadata_path(&bundle_dir, path))
+            .or_else(|| paths::env_path("SAM3_CHECKPOINT"))
+            .context(
+                "interactive reference test requires checkpoint_path metadata or SAM3_CHECKPOINT",
+            )?;
         let config = sam3::Config::default();
         let checkpoint = Sam3CheckpointSource::upstream_pth(checkpoint_path);
         let model = sam3::Sam3ImageModel::from_checkpoint_source(
@@ -710,14 +721,14 @@ mod tests {
             DType::F32,
             &device,
         )?;
+        let image_path = paths::resolve_metadata_path(&bundle_dir, &bundle.metadata.image_path);
         let image =
-            crate::preprocess_image_path_exact(&bundle.metadata.image_path, &model, &device)?;
+            crate::preprocess_image_path_exact(&image_path.to_string_lossy(), &model, &device)?;
         Ok((bundle, model, image, device))
     }
 
     fn reference_bundle_dir() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../candle-examples/examples/sam3/reference_interactive_replay")
+        paths::reference_bundle_dir("reference_interactive")
     }
 
     fn unique_temp_bundle_dir(label: &str) -> PathBuf {

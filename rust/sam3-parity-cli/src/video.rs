@@ -13,6 +13,8 @@ use candle_transformers::models::sam3;
 use image::{ImageReader, Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
 
+use crate::paths;
+
 const VIDEO_REFERENCE_METADATA_FILE: &str = "reference.json";
 const VIDEO_RESULTS_FILE: &str = "video_results.json";
 const VIDEO_FRAMES_DIR: &str = "frames";
@@ -546,7 +548,11 @@ pub fn run_video_reference_comparison(
     };
     let video_mode = VideoMode {
         video_path: reference_frames_dir.display().to_string(),
-        tokenizer_path: metadata.tokenizer_path.clone(),
+        tokenizer_path: metadata
+            .tokenizer_path
+            .as_ref()
+            .map(|path| paths::resolve_metadata_path(&bundle_root, path))
+            .map(|path| path.to_string_lossy().into_owned()),
         prompt_text: metadata.prompt_text.clone(),
         points: metadata
             .points_xy_normalized

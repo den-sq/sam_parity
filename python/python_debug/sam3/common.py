@@ -1,13 +1,18 @@
 import os
 import sys
+import unittest
 from pathlib import Path
 
-import torch
+try:
+    import torch
+except ImportError:
+    torch = None
+
+from sam3_parity.paths import repo_root, sam3_repo_root as env_sam3_repo_root
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-EXAMPLE_SAM3_DIR = REPO_ROOT / "candle-examples" / "examples" / "sam3"
-DEFAULT_SAM3_REPO = Path("/home/dnorthover/extcode/sam3_baseline")
+REPO_ROOT = repo_root()
+EXAMPLE_SAM3_DIR = REPO_ROOT / "python" / "sam3_parity"
 
 
 def ensure_repo_root_on_path() -> None:
@@ -23,7 +28,25 @@ def ensure_example_sam3_on_path() -> None:
 
 
 def sam3_repo_root() -> Path:
-    return Path(os.environ.get("SAM3_REPO", str(DEFAULT_SAM3_REPO))).expanduser().resolve()
+    root = env_sam3_repo_root()
+    if root is None:
+        raise FileNotFoundError("SAM3_REPO is required for Python full parity tests")
+    if not root.exists():
+        raise FileNotFoundError(f"SAM3_REPO does not exist: {root}")
+    return root
+
+
+def require_full_parity_path(path: Path, description: str) -> Path:
+    if not path.exists():
+        raise unittest.SkipTest(f"{description} is missing: {path}")
+    return path
+
+
+def resolve_metadata_path(base_dir: Path, value: str) -> Path:
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    return base_dir / path
 
 
 def add_upstream_sam3_to_path() -> Path:
@@ -97,4 +120,3 @@ def apply_cpu_safe_upstream_patches(
             return type_embed + boxes_embed, boxes_mask
 
         sequence_geometry_encoder_cls._encode_boxes = encode_boxes_cpu_safe
-

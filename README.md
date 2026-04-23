@@ -4,7 +4,7 @@ SAM3 parity tooling extracted from the Candle runtime repo.
 
 This sibling workspace owns upstream export, bundle contracts, comparison
 commands, parity documentation, and committed seed fixtures. The runtime SAM3
-implementation stays in `/home/dnorthover/ChengCode/candle_sam3`.
+implementation stays in the sibling `../candle_sam3` checkout.
 
 ## Layout
 
@@ -13,6 +13,7 @@ implementation stays in `/home/dnorthover/ChengCode/candle_sam3`.
 - `python/sam3_parity`: reference exporters and matrix generation
 - `python/python_debug`: Python-side fixture exporters and debug utilities
 - `tests/data`: committed seed fixtures
+- `tests/reference-bundles`: generated upstream export bundles for Rust/Python checks
 - `docs`: migration inventory, parity runbooks, and matrix docs
 
 ## Build
@@ -20,13 +21,13 @@ implementation stays in `/home/dnorthover/ChengCode/candle_sam3`.
 Rust workspace:
 
 ```bash
-cargo check --manifest-path /home/dnorthover/ChengCode/sam_parity/Cargo.toml
+cargo check --manifest-path Cargo.toml
 ```
 
 Python package:
 
 ```bash
-python -m pip install -e /home/dnorthover/ChengCode/sam_parity/python
+python -m pip install -e python
 ```
 
 ## Dependency Model
@@ -37,7 +38,7 @@ exact local Candle revision.
 
 ## Primary Contracts
 
-Frozen migration contracts live in [docs/MIGRATION_INVENTORY.md](/home/dnorthover/ChengCode/sam_parity/docs/MIGRATION_INVENTORY.md)
+Frozen migration contracts live in [docs/MIGRATION_INVENTORY.md](docs/MIGRATION_INVENTORY.md)
 and currently cover:
 
 - `reference.safetensors`
@@ -55,6 +56,14 @@ Use this repo for:
 - replaying interactive parity bundles
 - comparing video bundles and debug manifests
 - regenerating strict-port coverage matrices
+
+Portable path defaults:
+
+- `SAM3_PARITY_BUNDLE_ROOT`: generated bundle root, default `tests/reference-bundles`
+- `SAM3_PARITY_DATA_ROOT`: reusable fixture root, default `tests/data`
+- `SAM3_REPO`: upstream Python SAM3 checkout
+- `SAM3_CHECKPOINT`: local `sam3.pt` or checkpoint directory
+- `SAM3_TOKENIZER`: local `tokenizer.json`
 
 Use `candle_sam3` for:
 
