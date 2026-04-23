@@ -1,0 +1,24 @@
+{
+  "engine": "video_inference",
+  "apply_temporal_disambiguation": true,
+  "predictor_overrides": {
+    "masklet_confirmation_enable": true,
+    "masklet_confirmation_consecutive_det_thresh": 3
+  },
+  "debug_capture_frame_indices": [0, 1, 2, 3, 14, 15, 16],
+  "debug_capture_obj_ids": [0],
+  "actions": [
+    {
+      "type": "add_prompt",
+      "frame_idx": 0,
+      "boxes_xywh": [[0.43, 0.44, 0.28, 0.52]],
+      "box_labels": [1]
+    },
+    {
+      "type": "propagate",
+      "direction": "forward",
+      "start_frame_idx": 0,
+      "max_frame_num_to_track": 30
+    }
+  ]
+}

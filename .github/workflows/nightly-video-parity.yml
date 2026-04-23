@@ -1,0 +1,29 @@
+name: Nightly Video Parity
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * *"
+
+jobs:
+  gpu-video-parity:
+    runs-on: [self-hosted, linux, x64, gpu]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install Python tooling
+        working-directory: python
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+      - name: Run lightweight schema checks
+        run: cargo test -p sam3-parity-lib
+      - name: Run parity matrix
+        env:
+          SAM3_PARITY_CANDLE_SHA: ${{ github.sha }}
+        run: |
+          echo "Set repo-specific checkpoint and upstream path env vars before enabling this workflow in CI."
+          cargo test -p sam3-parity-cli -- --ignored --nocapture

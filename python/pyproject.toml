@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sam3-parity"
+version = "0.1.0"
+description = "SAM3 parity exporters, matrix generators, and validation helpers"
+requires-python = ">=3.11"
+dependencies = [
+    "Pillow",
+    "safetensors",
+    "torch",
+    "torchvision",
+]
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sam3_parity*", "python_debug*"]
+

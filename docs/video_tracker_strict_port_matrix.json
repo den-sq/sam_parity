@@ -1,0 +1,1447 @@
+{
+  "version": 1,
+  "video_frame_count": 30,
+  "bundles": [
+    {
+      "name": "video_box_debug_default",
+      "required": true,
+      "description": "Default single-object box-prompt video inference bundle.",
+      "covers": [
+        "box_prompt",
+        "forward_propagation",
+        "use_memory_selection_false",
+        "fill_hole_area_default",
+        "clear_non_cond_mem_around_input_true_default"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "boxes_xywh": [[0.43, 0.44, 0.28, 0.52]],
+            "box_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_box_debug_temporal_disambiguation",
+      "required": true,
+      "description": "Default single-object box-prompt bundle with temporal disambiguation enabled.",
+      "covers": [
+        "box_prompt",
+        "forward_propagation",
+        "use_memory_selection_true"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": true,
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "boxes_xywh": [[0.43, 0.44, 0.28, 0.52]],
+            "box_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_point_debug_single_click",
+      "required": true,
+      "description": "Single-click point prompt bundle.",
+      "covers": [
+        "point_prompt_single_click",
+        "multimask_point_count_gate_enabled"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_point_debug_multi_click",
+      "required": true,
+      "description": "Multi-click point prompt bundle with truncation still enabled.",
+      "covers": [
+        "point_prompt_multi_click",
+        "multimask_point_count_gate_disabled",
+        "max_point_num_in_prompt_enc_positive"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "max_point_num_in_prompt_enc": 4
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [
+              [0.57, 0.70],
+              [0.55, 0.56],
+              [0.61, 0.82],
+              [0.49, 0.74],
+              [0.74, 0.49],
+              [0.70, 0.82]
+            ],
+            "point_labels": [1, 1, 1, 1, 0, 0]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_point_debug_all_points",
+      "required": true,
+      "description": "Multi-click point prompt bundle with prompt-encoder truncation disabled.",
+      "covers": [
+        "point_prompt_multi_click",
+        "max_point_num_in_prompt_enc_nonpositive"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "max_point_num_in_prompt_enc": 0
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [
+              [0.57, 0.70],
+              [0.55, 0.56],
+              [0.61, 0.82],
+              [0.49, 0.74],
+              [0.74, 0.49],
+              [0.70, 0.82]
+            ],
+            "point_labels": [1, 1, 1, 1, 0, 0]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_mask_debug",
+      "required": true,
+      "description": "Direct mask-prompt bundle using the tracker engine.",
+      "covers": [
+        "mask_prompt",
+        "tracker_add_new_mask"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_mask",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "mask": {
+              "type": "box_xyxy",
+              "box_xyxy": [0.43, 0.44, 0.71, 0.96]
+            },
+            "add_mask_to_memory": true
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_correction_click_debug",
+      "required": true,
+      "description": "Default correction-click bundle.",
+      "covers": [
+        "correction_click",
+        "iter_use_prev_mask_pred_true",
+        "add_all_frames_to_correct_as_cond_true"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "debug_capture_frame_indices": [0, 1, 2, 3, 8, 9, 10, 11],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 9
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 8,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 8,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_correction_click_no_prev_mask_pred_debug",
+      "required": true,
+      "description": "Correction-click bundle with iter_use_prev_mask_pred disabled.",
+      "covers": [
+        "correction_click",
+        "iter_use_prev_mask_pred_false"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "iter_use_prev_mask_pred": false
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3, 8, 9, 10, 11],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 9
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 8,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 8,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_correction_click_prev_mem_debug",
+      "required": true,
+      "description": "Correction-click bundle with previous-memory conditioning enabled.",
+      "covers": [
+        "correction_click",
+        "use_prev_mem_frame_true"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "use_prev_mem_frame": true
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3, 8, 9, 10, 11],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 9
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 8,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 8,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_correction_click_stateless_refinement_debug",
+      "required": true,
+      "description": "Correction-click bundle with stateless refinement enabled and a small detector-cond-frame removal window.",
+      "covers": [
+        "correction_click",
+        "use_stateless_refinement_true",
+        "refinement_detector_cond_frame_removal_window_override"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "use_stateless_refinement": true,
+          "refinement_detector_cond_frame_removal_window": 2
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3, 8, 9, 10, 11],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 9
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 8,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 8,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_correction_click_no_clear_mem_debug",
+      "required": true,
+      "description": "Correction-click bundle with surrounding-memory clearing disabled.",
+      "covers": [
+        "correction_click",
+        "clear_non_cond_mem_around_input_false"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "clear_non_cond_mem_around_input": false
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3, 8, 9, 10, 11],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 9
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 8,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 8,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_correction_click_not_all_frames_cond_debug",
+      "required": true,
+      "description": "Correction-click bundle with add_all_frames_to_correct_as_cond disabled.",
+      "covers": [
+        "correction_click",
+        "add_all_frames_to_correct_as_cond_false"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "add_all_frames_to_correct_as_cond": false
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3, 8, 9, 10, 11],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 9
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 8,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 8,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_start_from_first_ann_debug",
+      "required": true,
+      "description": "Tracker-engine bundle that exercises always_start_from_first_ann_frame by prompting after frame 0 and propagating from a later requested start.",
+      "covers": [
+        "always_start_from_first_ann_frame_true"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "always_start_from_first_ann_frame": true
+        },
+        "debug_capture_frame_indices": [5, 6, 7, 8, 9, 10, 11, 12],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 5,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 12,
+            "max_frame_num_to_track": 18
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_multi_object_debug",
+      "required": true,
+      "description": "Two-object point-prompt bundle.",
+      "covers": [
+        "multi_object_tracking",
+        "clear_non_cond_mem_for_multi_obj_false_default"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1, 2],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 2,
+            "points_xy_normalized": [[0.34, 0.68]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_multi_object_clear_mem_debug",
+      "required": true,
+      "description": "Two-object correction-click bundle with multi-object memory clearing enabled.",
+      "covers": [
+        "multi_object_tracking",
+        "clear_non_cond_mem_for_multi_obj_true"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "clear_non_cond_mem_for_multi_obj": true
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3, 8, 9, 10, 11],
+        "debug_capture_obj_ids": [1, 2],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 2,
+            "points_xy_normalized": [[0.34, 0.68]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 9
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 8,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 8,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_output_non_overlap_debug",
+      "required": true,
+      "description": "Two-object bundle with output non-overlap enabled.",
+      "covers": [
+        "non_overlap_masks_for_output_true"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "non_overlap_masks_for_output": true
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1, 2],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 2,
+            "points_xy_normalized": [[0.60, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_mem_non_overlap_debug",
+      "required": true,
+      "description": "Two-object bundle with memory non-overlap enabled.",
+      "covers": [
+        "non_overlap_masks_for_mem_enc_true"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "non_overlap_masks_for_mem_enc": true
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1, 2],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 2,
+            "points_xy_normalized": [[0.60, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_fill_hole_disabled_debug",
+      "required": true,
+      "description": "Box-prompt bundle with hole filling disabled.",
+      "covers": [
+        "fill_hole_area_zero"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "fill_hole_area": 0
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "boxes_xywh": [[0.43, 0.44, 0.28, 0.52]],
+            "box_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_fill_hole_enabled_debug",
+      "required": true,
+      "description": "Box-prompt bundle with hole filling enabled.",
+      "covers": [
+        "fill_hole_area_positive"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "predictor_overrides": {
+          "fill_hole_area": 16
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "boxes_xywh": [[0.43, 0.44, 0.28, 0.52]],
+            "box_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_long_history_stride1_debug",
+      "required": true,
+      "description": "Long-history bundle with stride 1 to exceed conditioning selection windows.",
+      "covers": [
+        "long_history",
+        "max_cond_frames_in_attn_overflow",
+        "memory_temporal_stride_for_eval_one"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "debug_capture_frame_indices": [0, 1, 2, 3, 20, 21, 22, 23, 28, 29],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 5,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.58, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 10,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.59, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 15,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 20,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.61, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 20,
+            "max_frame_num_to_track": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_long_history_obj_ptr_overflow_debug",
+      "required": true,
+      "description": "Long-history bundle that exceeds the object-pointer encoder cap so truncation is exercised explicitly.",
+      "covers": [
+        "long_history",
+        "max_obj_ptrs_in_encoder_overflow",
+        "max_obj_ptrs_in_encoder_truncation"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "debug_capture_frame_indices": [
+          0,
+          2,
+          4,
+          6,
+          8,
+          10,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29
+        ],
+        "debug_capture_obj_ids": [
+          1
+        ],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [
+              [
+                0.57,
+                0.7
+              ]
+            ],
+            "point_labels": [
+              1
+            ]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 2,
+            "obj_id": 1,
+            "points_xy_normalized": [
+              [
+                0.575,
+                0.695
+              ]
+            ],
+            "point_labels": [
+              1
+            ],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 4,
+            "obj_id": 1,
+            "points_xy_normalized": [
+              [
+                0.58,
+                0.69
+              ]
+            ],
+            "point_labels": [
+              1
+            ],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 6,
+            "obj_id": 1,
+            "points_xy_normalized": [
+              [
+                0.585,
+                0.688
+              ]
+            ],
+            "point_labels": [
+              1
+            ],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 8,
+            "obj_id": 1,
+            "points_xy_normalized": [
+              [
+                0.59,
+                0.686
+              ]
+            ],
+            "point_labels": [
+              1
+            ],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 10,
+            "obj_id": 1,
+            "points_xy_normalized": [
+              [
+                0.595,
+                0.684
+              ]
+            ],
+            "point_labels": [
+              1
+            ],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 12,
+            "obj_id": 1,
+            "points_xy_normalized": [
+              [
+                0.6,
+                0.682
+              ]
+            ],
+            "point_labels": [
+              1
+            ],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 12,
+            "max_frame_num_to_track": 18
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_long_history_stride_gt1_debug",
+      "required": true,
+      "description": "Long-history bundle with memory temporal stride > 1.",
+      "covers": [
+        "long_history",
+        "memory_temporal_stride_for_eval_gt_one"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "memory_temporal_stride_for_eval": 2
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3, 20, 21, 22, 23, 28, 29],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 5,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.58, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 10,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.59, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 15,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 20,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.61, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 20,
+            "max_frame_num_to_track": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_long_history_keep_first_cond_debug",
+      "required": true,
+      "description": "Long-history bundle with keep_first_cond_frame enabled.",
+      "covers": [
+        "long_history",
+        "keep_first_cond_frame_true"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "keep_first_cond_frame": true
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3, 20, 21, 22, 23, 28, 29],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 5,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.58, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 10,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.59, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 15,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 20,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.61, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 20,
+            "max_frame_num_to_track": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_long_history_temporal_disambiguation_debug",
+      "required": true,
+      "description": "Long-history bundle with temporal disambiguation enabled so use_memory_selection/frame_filter are exercised on a real history window.",
+      "covers": [
+        "long_history",
+        "use_memory_selection_true",
+        "frame_filter"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": true,
+        "debug_capture_frame_indices": [0, 1, 2, 3, 20, 21, 22, 23, 28, 29],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 5,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.58, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 10,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.59, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 15,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 20,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.61, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 20,
+            "max_frame_num_to_track": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_long_history_trim_mem_debug",
+      "required": true,
+      "description": "Long-history bundle with non-conditioning-memory trimming enabled.",
+      "covers": [
+        "long_history",
+        "trim_past_non_cond_mem_for_eval_true"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "trim_past_non_cond_mem_for_eval": true
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3, 20, 21, 22, 23, 28, 29],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 5,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.58, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 10,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.59, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 15,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.60, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 20,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.61, 0.69]],
+            "point_labels": [1],
+            "clear_old_points": false
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 20,
+            "max_frame_num_to_track": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_offload_output_cpu_debug",
+      "required": true,
+      "description": "Single-click tracker bundle with outputs offloaded to CPU.",
+      "covers": [
+        "offload_output_to_cpu_for_eval_true"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "offload_output_to_cpu_for_eval": true
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.7]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_reverse_propagation_debug",
+      "required": true,
+      "description": "Reverse-propagation bundle starting from a later annotated frame.",
+      "covers": [
+        "reverse_propagation"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "debug_capture_frame_indices": [15, 16, 17, 18, 19, 20],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 20,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.61, 0.69]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "backward",
+            "start_frame_idx": 20,
+            "max_frame_num_to_track": 10
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_multimask_disabled_tracking_debug",
+      "required": true,
+      "description": "Single-click point bundle with multimask tracking disabled.",
+      "covers": [
+        "multimask_output_for_tracking_false"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "multimask_output_for_tracking": false
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_multimask_disabled_sam_debug",
+      "required": true,
+      "description": "Single-click point bundle with multimask disabled in the SAM heads.",
+      "covers": [
+        "multimask_output_in_sam_false"
+      ],
+      "scenario": {
+        "engine": "tracker",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "multimask_output_in_sam": false
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_postprocess_hidden_obj_debug",
+      "required": true,
+      "description": "Single-object negative-point bundle that forces the final postprocess output to stay empty, certifying the hidden/empty output path.",
+      "covers": [
+        "empty_missing_object_output_path",
+        "hidden_final_output_path"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "debug_capture_obj_ids": [1],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.06, 0.18]],
+            "point_labels": [0]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_postprocess_unconfirmed_box_debug",
+      "required": true,
+      "description": "Single-object temporal-disambiguation bundle that drives non-empty unconfirmed and later removed object metadata, certifying the deeper confirmation/hotstart producer path.",
+      "covers": [
+        "hidden_final_output_path",
+        "unconfirmed_obj_ids_producer_path",
+        "removed_obj_ids_confirmation_hotstart_path"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": true,
+        "debug_capture_frame_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16],
+        "predictor_overrides": {
+          "masklet_confirmation_enable": true,
+          "masklet_confirmation_consecutive_det_thresh": 3
+        },
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "boxes_xywh": [[0.57, 0.70, 0.28, 0.52]],
+            "box_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    },
+    {
+      "name": "video_forward_backbone_all_frames_debug",
+      "required": false,
+      "required_if_reachable": true,
+      "description": "Optional bundle for the non-per-frame backbone-forward branch, only if reachable in the upstream SAM3 video path being ported.",
+      "covers": [
+        "forward_backbone_per_frame_for_eval_false"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": false,
+        "tracker_overrides": {
+          "forward_backbone_per_frame_for_eval": false
+        },
+        "debug_capture_frame_indices": [0, 1, 2, 3],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "boxes_xywh": [[0.43, 0.44, 0.28, 0.52]],
+            "box_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 30
+          }
+        ]
+      }
+    }
+  ]
+}
