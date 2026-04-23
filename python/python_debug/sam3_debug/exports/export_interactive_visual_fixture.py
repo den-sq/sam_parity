@@ -18,6 +18,7 @@ from python_debug.sam3_debug.common import (
 from sam3_parity.upstream import (
     import_sam3_module,
     import_sam3_symbol,
+    installed_sam3_info,
     resolve_default_bpe_path,
 )
 
@@ -200,6 +201,7 @@ def main():
         "bundle_version": 1,
         "image_path": str(Path(args.image).expanduser().resolve()),
         "image_size": args.image_size,
+        "sam3_import": installed_sam3_info(),
     }
     with open(output_dir / "metadata.json", "w", encoding="utf-8") as f:
         json.dump(metadata, f, indent=2)

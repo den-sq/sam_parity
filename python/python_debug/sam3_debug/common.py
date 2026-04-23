@@ -62,6 +62,23 @@ def apply_cpu_safe_upstream_patches(
 
     sam3_model_builder._create_position_encoding = create_cpu_position_encoding
 
+    vitdet_module = import_sam3_module("sam3.model.vitdet")
+    original_addmm_act = vitdet_module.addmm_act
+
+    def addmm_act_cpu_safe(activation, linear, mat1):
+        if mat1.device.type == "cuda" and linear.weight.device.type == "cuda":
+            return original_addmm_act(activation, linear, mat1)
+        if torch.is_grad_enabled():
+            raise ValueError("Expected grad to be disabled.")
+        out = torch.nn.functional.linear(mat1, linear.weight.detach(), linear.bias.detach())
+        if activation in [torch.nn.functional.relu, torch.nn.ReLU]:
+            return torch.nn.functional.relu(out)
+        if activation in [torch.nn.functional.gelu, torch.nn.GELU]:
+            return torch.nn.functional.gelu(out)
+        raise ValueError(f"Unexpected activation {activation}")
+
+    vitdet_module.addmm_act = addmm_act_cpu_safe
+
     if transformer_decoder_cls is not None:
         def get_coords_cpu_safe(H, W, device):
             if device == "cuda":

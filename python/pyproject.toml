@@ -6,10 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "sam3-parity"
 version = "0.1.0"
 description = "SAM3 parity exporters, matrix generators, and validation helpers"
-requires-python = ">=3.11"
+requires-python = ">=3.11,<4"
 dependencies = [
     "Pillow",
     "pytest",
+	"psutil",
     "safetensors",
     "setuptools<81",
     "torch",
