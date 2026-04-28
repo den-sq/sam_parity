@@ -94,10 +94,21 @@ fn full_parity_generated_bundles_have_expected_layout_when_present() -> Result<(
 #[test]
 fn extracted_tracker_and_video_parity_sources_are_preserved() -> Result<()> {
     let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    for file_name in ["tracker_parity.rs", "video_parity.rs"] {
+    for file_name in [
+        "tracker_parity.rs",
+        "video_parity.rs",
+        "tracker_parity_support.rs",
+        "video_parity_support.rs",
+    ] {
         let path = manifest_dir.join("src").join(file_name);
         let text = fs::read_to_string(&path)
             .with_context(|| format!("failed to read {}", path.display()))?;
+        if file_name.ends_with("_support.rs") {
+            if text.trim().is_empty() {
+                bail!("{} should contain scaffold helpers", path.display());
+            }
+            continue;
+        }
         if !text.contains("#[test]") {
             bail!("{} no longer contains extracted test functions", path.display());
         }
