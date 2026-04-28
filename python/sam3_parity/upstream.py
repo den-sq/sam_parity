@@ -91,6 +91,29 @@ def import_sam3_symbol(module_name: str, symbol_name: str):
         ) from exc
 
 
+def import_video_predictor_builder():
+    module = import_sam3_module("sam3.model_builder")
+    legacy_builder = getattr(module, "build_sam3_predictor", None)
+    if callable(legacy_builder):
+        return legacy_builder
+
+    video_builder = getattr(module, "build_sam3_video_predictor", None)
+    if callable(video_builder):
+        def compat_builder(*args, **kwargs):
+            # Current upstream exposes the video predictor builder directly and
+            # does not accept legacy image/video selector flags.
+            kwargs.pop("version", None)
+            kwargs.pop("compile", None)
+            return video_builder(*args, **kwargs)
+
+        return compat_builder
+
+    raise FileNotFoundError(
+        "installed sam3 package imported sam3.model_builder, but it does not expose "
+        "'build_sam3_predictor' or 'build_sam3_video_predictor'"
+    )
+
+
 def sam3_package_dir() -> Path:
     module = import_sam3_module("sam3")
     module_file = getattr(module, "__file__", None)
@@ -100,12 +123,18 @@ def sam3_package_dir() -> Path:
 
 
 def resolve_sam3_asset_path(relative_path: str) -> Path:
-    asset_path = sam3_package_dir() / relative_path
-    if not asset_path.exists():
-        raise FileNotFoundError(
-            f"installed sam3 package is missing bundled asset: {asset_path}"
-        )
-    return asset_path
+    package_dir = sam3_package_dir()
+    candidates = [
+        package_dir / relative_path,
+        package_dir.parent / relative_path,
+    ]
+    for asset_path in candidates:
+        if asset_path.exists():
+            return asset_path
+    raise FileNotFoundError(
+        "installed sam3 package is missing bundled asset; checked "
+        + ", ".join(str(path) for path in candidates)
+    )
 
 
 def resolve_default_bpe_path(explicit_path: str | None = None) -> Path:

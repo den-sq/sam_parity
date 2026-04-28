@@ -20,6 +20,7 @@ try:
         sam3_tokenizer_path,
     )
     from sam3_parity.upstream import (
+        import_video_predictor_builder,
         import_sam3_module,
         import_sam3_symbol,
         installed_sam3_info,
@@ -34,6 +35,7 @@ except ModuleNotFoundError:
         sam3_tokenizer_path,
     )
     from sam3_parity.upstream import (
+        import_video_predictor_builder,
         import_sam3_module,
         import_sam3_symbol,
         installed_sam3_info,
@@ -2949,7 +2951,7 @@ def main():
 
         from PIL import Image
 
-        build_sam3_predictor = import_sam3_symbol("sam3.model_builder", "build_sam3_predictor")
+        build_sam3_predictor = import_video_predictor_builder()
 
         source_video_path = Path(args.video).expanduser().resolve()
         frames_dir = output_dir / "frames"
