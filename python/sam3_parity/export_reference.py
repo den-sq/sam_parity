@@ -908,6 +908,17 @@ def merge_frame_outputs(frame_outputs, frame_idx, outputs):
         frame_outputs[frame_idx] = outputs
 
 
+def replace_frame_outputs(frame_outputs, frame_idx, outputs):
+    frame_outputs[frame_idx] = outputs
+
+
+def store_frame_outputs(frame_outputs, frame_idx, outputs, *, replace_existing=False):
+    if replace_existing:
+        replace_frame_outputs(frame_outputs, frame_idx, outputs)
+    else:
+        merge_frame_outputs(frame_outputs, frame_idx, outputs)
+
+
 def render_video_reference_frame(
     frame_image,
     frame_idx,
@@ -2506,10 +2517,11 @@ def execute_video_scenario_action_video_inference(
         if action.get("obj_id") is not None:
             request["obj_id"] = int(action["obj_id"])
         response = predictor.handle_request(request)
-        merge_frame_outputs(
+        store_frame_outputs(
             frame_outputs,
             int(response["frame_index"]),
             response["outputs"],
+            replace_existing=bool(action.get("replace_existing_frame_outputs", False)),
         )
         if args.video_debug_bundle and should_capture_video_debug(args, int(response["frame_index"]), int(action["frame_idx"])):
             outputs = response.get("outputs", {})
@@ -2543,6 +2555,31 @@ def execute_video_scenario_action_video_inference(
                         "propagation_input": None,
                     }
                 )
+        return
+
+    if action_type == "remove_object":
+        frame_idx = int(action.get("frame_idx", 0))
+        response = predictor.handle_request(
+            {
+                "type": "remove_object",
+                "session_id": session_id,
+                "frame_index": frame_idx,
+                "obj_id": int(action["obj_id"]),
+            }
+        )
+        replace_frame_outputs(
+            frame_outputs,
+            int(response.get("frame_index", frame_idx)),
+            response.get(
+                "outputs",
+                {
+                    "out_obj_ids": [],
+                    "out_probs": [],
+                    "out_boxes_xywh": [],
+                    "out_binary_masks": [],
+                },
+            ),
+        )
         return
 
     if action_type == "propagate":
@@ -2591,7 +2628,12 @@ def execute_video_scenario_action_video_inference(
         }
         for response in predictor.handle_stream_request(request):
             frame_idx = int(response["frame_index"])
-            merge_frame_outputs(frame_outputs, frame_idx, response["outputs"])
+            store_frame_outputs(
+                frame_outputs,
+                frame_idx,
+                response["outputs"],
+                replace_existing=bool(action.get("replace_existing_frame_outputs", False)),
+            )
             if not args.video_debug_bundle or not should_capture_video_debug(
                 args, frame_idx, action.get("start_frame_idx", None)
             ):
@@ -2666,7 +2708,12 @@ def execute_video_scenario_action_tracker(
         outputs = normalize_tracker_outputs(
             inference_state, int(frame_idx_out), obj_ids, video_res_masks
         )
-        merge_frame_outputs(frame_outputs, int(frame_idx_out), outputs)
+        store_frame_outputs(
+            frame_outputs,
+            int(frame_idx_out),
+            outputs,
+            replace_existing=bool(action.get("replace_existing_frame_outputs", False)),
+        )
         if args.video_debug_bundle and should_capture_video_debug(args, int(frame_idx_out), frame_idx):
             for obj_id_out, score, box_xywh, mask in zip(
                 outputs.get("out_obj_ids", []),
@@ -2713,7 +2760,12 @@ def execute_video_scenario_action_tracker(
         outputs = normalize_tracker_outputs(
             inference_state, int(frame_idx_out), obj_ids, video_res_masks
         )
-        merge_frame_outputs(frame_outputs, int(frame_idx_out), outputs)
+        store_frame_outputs(
+            frame_outputs,
+            int(frame_idx_out),
+            outputs,
+            replace_existing=bool(action.get("replace_existing_frame_outputs", False)),
+        )
         if args.video_debug_bundle and should_capture_video_debug(args, int(frame_idx_out), frame_idx):
             for obj_id_out, score, box_xywh, mask in zip(
                 outputs.get("out_obj_ids", []),
@@ -2761,7 +2813,12 @@ def execute_video_scenario_action_tracker(
                     outputs = normalize_tracker_outputs(
                         inference_state, int(frame_idx_out), obj_ids, video_res_masks
                     )
-                    merge_frame_outputs(frame_outputs, int(frame_idx_out), outputs)
+                    store_frame_outputs(
+                        frame_outputs,
+                        int(frame_idx_out),
+                        outputs,
+                        replace_existing=bool(action.get("replace_existing_frame_outputs", False)),
+                    )
                     if not args.video_debug_bundle or not should_capture_video_debug(
                         args, int(frame_idx_out), action.get("start_frame_idx", None)
                     ):

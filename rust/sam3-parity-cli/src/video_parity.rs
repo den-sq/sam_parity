@@ -1509,6 +1509,75 @@
     }
 
     #[test]
+    fn video_propagation_matches_remove_object_suppressed_reference_bundle() -> Result<()> {
+        let bundle = "reference_video_suppressed_obj_ids_remove_object_debug";
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
+        else {
+            return Ok(());
+        };
+        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
+        apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
+        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        for action in load_reference_point_prompt_actions(bundle)? {
+            predictor.add_prompt(
+                &session_id,
+                action.frame_idx,
+                SessionPrompt {
+                    text: None,
+                    points: Some(action.points),
+                    point_labels: Some(action.point_labels),
+                    boxes: None,
+                    box_labels: None,
+                },
+                Some(action.obj_id),
+                true,
+                true,
+            )?;
+        }
+        for (frame_idx, obj_id) in load_reference_remove_object_actions(bundle)? {
+            assert_eq!(
+                frame_idx, 0,
+                "remove_object parity replay currently expects frame_idx=0"
+            );
+            predictor.remove_object(&session_id, obj_id)?;
+        }
+        let output = predictor.propagate_in_video(&session_id, PropagationOptions::default())?;
+        let actual_non_empty = output
+            .frames
+            .iter()
+            .filter(|frame| !frame.objects.is_empty())
+            .map(|frame| frame.frame_idx)
+            .collect::<Vec<_>>();
+        let expected_non_empty = load_reference_frame_indices(bundle)?;
+        assert_eq!(actual_non_empty, expected_non_empty);
+        let session = predictor.parity_session(&session_id).ok_or_else(|| {
+            candle::Error::Msg(format!("missing session {} after propagation", session_id))
+        })?;
+        let expected_metadata = load_reference_run_single_temporal_metadata_last_per_frame(bundle)?;
+        for (frame_idx, expected) in expected_metadata {
+            let actual = session
+                .parity_temporal_disambiguation_metadata()
+                .get(&frame_idx)
+                .cloned()
+                .unwrap_or_default();
+            assert_eq!(
+                actual.removed_obj_ids, expected.removed_obj_ids,
+                "removed_obj_ids mismatch on frame {frame_idx}"
+            );
+            assert_eq!(
+                actual.suppressed_obj_ids, expected.suppressed_obj_ids,
+                "suppressed_obj_ids mismatch on frame {frame_idx}"
+            );
+            assert_eq!(
+                actual.unconfirmed_obj_ids, expected.unconfirmed_obj_ids,
+                "unconfirmed_obj_ids mismatch on frame {frame_idx}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
     fn video_propagation_can_start_from_first_annotation_reference_bundle() -> Result<()> {
         let bundle = "reference_video_start_from_first_ann_debug";
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?

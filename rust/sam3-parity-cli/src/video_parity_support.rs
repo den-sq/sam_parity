@@ -570,6 +570,102 @@ mod tests {
         Ok((points, labels))
     }
 
+    #[derive(Clone, Debug, PartialEq)]
+    struct ReferenceScenarioPointPromptAction {
+        frame_idx: usize,
+        obj_id: u32,
+        points: Vec<(f32, f32)>,
+        point_labels: Vec<u32>,
+    }
+
+    fn load_reference_point_prompt_actions(
+        bundle: &str,
+    ) -> Result<Vec<ReferenceScenarioPointPromptAction>> {
+        let bundle_dir = reference_bundle_dir(bundle);
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(bundle_dir.join("reference.json"))?)
+                .map_err(|err| candle::Error::Msg(err.to_string()))?;
+        let actions = value["scenario"]["actions"].as_array().ok_or_else(|| {
+            candle::Error::Msg("reference bundle missing scenario actions".to_owned())
+        })?;
+        actions
+            .iter()
+            .filter(|action| {
+                action["type"].as_str() == Some("add_prompt")
+                    && action["points_xy_normalized"].as_array().is_some()
+            })
+            .map(|action| {
+                let frame_idx = action["frame_idx"].as_u64().ok_or_else(|| {
+                    candle::Error::Msg(
+                        "reference point scenario action missing frame_idx".to_owned(),
+                    )
+                })? as usize;
+                let obj_id = action["obj_id"].as_u64().ok_or_else(|| {
+                    candle::Error::Msg("reference point scenario action missing obj_id".to_owned())
+                })? as u32;
+                let points = action["points_xy_normalized"]
+                    .as_array()
+                    .ok_or_else(|| {
+                        candle::Error::Msg(
+                            "reference point scenario missing points_xy_normalized".to_owned(),
+                        )
+                    })?
+                    .iter()
+                    .map(|point| {
+                        let point = point.as_array().ok_or_else(|| {
+                            candle::Error::Msg(
+                                "reference point scenario contains a malformed point".to_owned(),
+                            )
+                        })?;
+                        Ok((
+                            point[0].as_f64().unwrap_or(0.0) as f32,
+                            point[1].as_f64().unwrap_or(0.0) as f32,
+                        ))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let point_labels = action["point_labels"]
+                    .as_array()
+                    .ok_or_else(|| {
+                        candle::Error::Msg(
+                            "reference point scenario missing point_labels".to_owned(),
+                        )
+                    })?
+                    .iter()
+                    .map(|value| value.as_u64().unwrap_or(0) as u32)
+                    .collect::<Vec<_>>();
+                Ok(ReferenceScenarioPointPromptAction {
+                    frame_idx,
+                    obj_id,
+                    points,
+                    point_labels,
+                })
+            })
+            .collect()
+    }
+
+    fn load_reference_remove_object_actions(bundle: &str) -> Result<Vec<(usize, u32)>> {
+        let bundle_dir = reference_bundle_dir(bundle);
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(bundle_dir.join("reference.json"))?)
+                .map_err(|err| candle::Error::Msg(err.to_string()))?;
+        let actions = value["scenario"]["actions"].as_array().ok_or_else(|| {
+            candle::Error::Msg("reference bundle missing scenario actions".to_owned())
+        })?;
+        actions
+            .iter()
+            .filter(|action| action["type"].as_str() == Some("remove_object"))
+            .map(|action| {
+                let frame_idx = action["frame_idx"].as_u64().unwrap_or(0) as usize;
+                let obj_id = action["obj_id"].as_u64().ok_or_else(|| {
+                    candle::Error::Msg(
+                        "reference remove_object scenario action missing obj_id".to_owned(),
+                    )
+                })? as u32;
+                Ok((frame_idx, obj_id))
+            })
+            .collect()
+    }
+
     fn load_reference_internal_manifest(bundle: &str) -> Result<serde_json::Value> {
         let bundle_dir = reference_bundle_dir(bundle);
         serde_json::from_slice(&fs::read(bundle_dir.join("debug/internal_manifest.json"))?)

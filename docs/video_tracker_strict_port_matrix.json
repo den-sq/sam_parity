@@ -1444,6 +1444,55 @@
       "artifact_dir": "reference_video_postprocess_unconfirmed_box_debug"
     },
     {
+      "name": "video_suppressed_obj_ids_remove_object_debug",
+      "required": true,
+      "description": "Two-object point-prompt bundle that removes one tracked object after an initial propagation pass, targeting suppressed_obj_ids coverage on the replayed predictor.remove_object path.",
+      "covers": [
+        "suppressed_obj_ids_remove_object_path"
+      ],
+      "scenario": {
+        "engine": "video_inference",
+        "apply_temporal_disambiguation": true,
+        "debug_capture_frame_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8],
+        "debug_capture_obj_ids": [1, 2],
+        "actions": [
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 1,
+            "points_xy_normalized": [[0.57, 0.70]],
+            "point_labels": [1]
+          },
+          {
+            "type": "add_prompt",
+            "frame_idx": 0,
+            "obj_id": 2,
+            "points_xy_normalized": [[0.34, 0.68]],
+            "point_labels": [1]
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 9
+          },
+          {
+            "type": "remove_object",
+            "frame_idx": 0,
+            "obj_id": 2
+          },
+          {
+            "type": "propagate",
+            "direction": "forward",
+            "start_frame_idx": 0,
+            "max_frame_num_to_track": 9,
+            "replace_existing_frame_outputs": true
+          }
+        ]
+      },
+      "artifact_dir": "reference_video_suppressed_obj_ids_remove_object_debug"
+    },
+    {
       "name": "video_forward_backbone_all_frames_debug",
       "required": false,
       "required_if_reachable": true,
