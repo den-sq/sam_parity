@@ -1,13 +1,17 @@
 mod tests {
     use super::*;
+    use std::{
+        collections::{BTreeMap, BTreeSet},
+        fs,
+        path::{Path, PathBuf},
+    };
+
     use candle::Tensor;
     use candle_nn::VarBuilder;
+    use candle_transformers::models::sam3::parity_support::ParityTemporalDisambiguationFrameMetadata;
     use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage};
 
-    use crate::models::sam3::{
-        Config, DecoderConfig, EncoderConfig, GeometryConfig, ImageConfig, NeckConfig,
-        Sam3TrackerConfig, SegmentationConfig, TextConfig, VisionConfig,
-    };
+    const VIDEO_DEBUG_MASK_THRESHOLD: f32 = 0.5;
 
     fn tiny_segmentation_config() -> Config {
         Config {
@@ -249,8 +253,7 @@ mod tests {
         };
         let device = Device::Cpu;
         let config = Config::default();
-        let checkpoint =
-            crate::models::sam3::checkpoint::Sam3CheckpointSource::upstream_pth(checkpoint_path);
+        let checkpoint = sam3::Sam3CheckpointSource::upstream_pth(checkpoint_path);
         let model =
             Sam3ImageModel::from_checkpoint_source(&config, &checkpoint, DType::F32, &device)?;
         let tracker_config = tracker_config_with_reference_runtime_overrides(bundle)?;
@@ -268,9 +271,7 @@ mod tests {
     }
 
     fn reference_bundle_dir(name: &str) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../candle-examples/examples/sam3")
-            .join(name)
+        paths::bundle_root().join(name)
     }
 
     fn reference_input_frames_dir(name: &str) -> PathBuf {
@@ -587,19 +588,21 @@ mod tests {
             .get("fill_hole_area")
             .and_then(|value| value.as_u64())
         {
-            predictor.video_config.fill_hole_area = fill_hole_area as usize;
+            predictor.parity_video_config_mut().fill_hole_area = fill_hole_area as usize;
         }
         if let Some(max_point_num) = predictor_config
             .get("max_point_num_in_prompt_enc")
             .and_then(|value| value.as_u64())
         {
-            predictor.video_config.max_point_num_in_prompt_enc = max_point_num as usize;
+            predictor.parity_video_config_mut().max_point_num_in_prompt_enc =
+                max_point_num as usize;
         }
         if let Some(non_overlap_masks_for_output) = predictor_config
             .get("non_overlap_masks_for_output")
             .and_then(|value| value.as_bool())
         {
-            predictor.video_config.non_overlap_masks_for_output = non_overlap_masks_for_output;
+            predictor.parity_video_config_mut().non_overlap_masks_for_output =
+                non_overlap_masks_for_output;
         }
         Ok(())
     }
@@ -741,9 +744,63 @@ mod tests {
         Ok((boxes, presence_score, masks))
     }
 
+    fn resize_mask_logits_to_video(mask_logits: &Tensor, video_size: ImageSize) -> Result<Tensor> {
+        let mask_logits = match mask_logits.rank() {
+            2 => mask_logits.unsqueeze(0)?.unsqueeze(0)?,
+            3 => mask_logits.unsqueeze(0)?,
+            4 => mask_logits.clone(),
+            rank => candle::bail!("expected mask logits rank 2, 3, or 4, got {}", rank),
+        };
+        mask_logits.upsample_bilinear2d(video_size.height, video_size.width, false)
+    }
+
+    fn mask_to_normalized_xyxy(mask: &Tensor) -> Result<Tensor> {
+        let mask = match mask.rank() {
+            4 => mask.i((0, 0))?,
+            3 => mask.i(0)?,
+            2 => mask.clone(),
+            rank => candle::bail!("expected mask rank 2, 3, or 4, got {}", rank),
+        };
+        let (height, width) = mask.dims2()?;
+        if height == 0 || width == 0 {
+            return Tensor::zeros((1, 4), DType::F32, mask.device());
+        }
+        let binary = mask.ge(0.5f32)?.to_dtype(DType::F32)?;
+        let row_any = binary.max(candle::D::Minus1)?;
+        let col_any = binary.max(candle::D::Minus2)?;
+        if row_any.max_all()?.to_scalar::<f32>()? <= 0.0 {
+            return Tensor::zeros((1, 4), DType::F32, mask.device());
+        }
+        let width_scale = width.max(1) as f64;
+        let height_scale = height.max(1) as f64;
+        let min_x = col_any
+            .argmax(0)?
+            .to_dtype(DType::F32)?
+            .reshape((1,))?
+            .affine(1.0 / width_scale, 0.0)?;
+        let min_y = row_any
+            .argmax(0)?
+            .to_dtype(DType::F32)?
+            .reshape((1,))?
+            .affine(1.0 / height_scale, 0.0)?;
+        let max_x = col_any
+            .flip(&[0])?
+            .argmax(0)?
+            .to_dtype(DType::F32)?
+            .reshape((1,))?
+            .affine(-1.0 / width_scale, 1.0)?;
+        let max_y = row_any
+            .flip(&[0])?
+            .argmax(0)?
+            .to_dtype(DType::F32)?
+            .reshape((1,))?
+            .affine(-1.0 / height_scale, 1.0)?;
+        Tensor::stack(&[&min_x, &min_y, &max_x, &max_y], 0)?.reshape((1, 4))
+    }
+
     fn load_reference_run_single_temporal_metadata_last_per_frame(
         bundle: &str,
-    ) -> Result<BTreeMap<usize, TemporalDisambiguationFrameMetadata>> {
+    ) -> Result<BTreeMap<usize, ParityTemporalDisambiguationFrameMetadata>> {
         let manifest = load_reference_internal_manifest(bundle)?;
         let records = manifest["records"]
             .as_array()
@@ -768,7 +825,7 @@ mod tests {
             };
             metadata_by_frame.insert(
                 frame_idx,
-                TemporalDisambiguationFrameMetadata {
+                ParityTemporalDisambiguationFrameMetadata {
                     removed_obj_ids: read_ids("removed_obj_ids"),
                     suppressed_obj_ids: read_ids("suppressed_obj_ids"),
                     unconfirmed_obj_ids: read_ids("unconfirmed_obj_ids"),
@@ -791,6 +848,16 @@ mod tests {
                 })
             })
             .collect()
+    }
+
+    fn tensor_to_mask_probs_2d(tensor: &Tensor) -> Result<Vec<Vec<f32>>> {
+        let tensor = match tensor.rank() {
+            2 => tensor.clone(),
+            3 => tensor.i(0)?,
+            4 => tensor.i((0, 0))?,
+            rank => candle::bail!("expected mask tensor rank 2/3/4, got {rank}"),
+        };
+        tensor.to_dtype(DType::F32)?.to_vec2::<f32>()
     }
 
     fn assert_tensor_close(
@@ -1029,7 +1096,7 @@ mod tests {
             "frame8": {
                 "actual_boxes_xyxy": actual8.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?,
                 "expected_boxes_xyxy": expected_boxes8,
-                "actual_score": actual8.score_value()?,
+                "actual_score": actual8.parity_score_value()?,
                 "expected_score": expected_score8,
                 "actual_presence_score": maybe_single_tensor_value(actual8.presence_scores.as_ref())?,
                 "memory_frame_indices": actual8.memory_frame_indices,
@@ -1038,7 +1105,7 @@ mod tests {
             "frame9": {
                 "actual_boxes_xyxy": actual9.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?,
                 "expected_boxes_xyxy": expected_boxes9,
-                "actual_score": actual9.score_value()?,
+                "actual_score": actual9.parity_score_value()?,
                 "expected_score": expected_score9,
                 "actual_presence_score": maybe_single_tensor_value(actual9.presence_scores.as_ref())?,
                 "memory_frame_indices": actual9.memory_frame_indices,
@@ -1127,7 +1194,5 @@ mod tests {
         Tensor::from_vec(data, (1, 1, size.height, size.width), device)
     }
 
-    // Raw extracted support scaffold from the in-tree Candle parity harness.
-    // This file is intentionally parked until the external crate can activate
-    // it against feature-gated Candle parity-support APIs.
+    include!("video_parity.rs");
 }

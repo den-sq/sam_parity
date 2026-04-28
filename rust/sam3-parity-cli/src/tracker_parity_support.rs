@@ -1,15 +1,14 @@
 mod tests {
     use super::*;
 
-    use std::{collections::HashMap, fs, path::PathBuf};
-
-    use serde::Deserialize;
-
-    use crate::models::sam3::{
-        DecoderConfig, EncoderConfig, GeometryConfig, ImageConfig, NeckConfig, SegmentationConfig,
-        TextConfig, VisionConfig,
+    use std::{
+        collections::{BTreeMap, HashMap},
+        fs,
+        path::PathBuf,
     };
 
+    use candle_transformers::models::sam3::{Sam3CheckpointSource, VisualBackboneOutput};
+    use serde::Deserialize;
     fn tiny_config() -> Config {
         Config {
             image: ImageConfig {
@@ -92,162 +91,7 @@ mod tests {
     }
 
     fn expected_upstream_config(apply_temporal_disambiguation: bool) -> Sam3TrackerConfig {
-        Sam3TrackerConfig {
-            image_size: 1008,
-            hidden_dim: 256,
-            memory_dim: 64,
-            backbone_stride: 14,
-            num_maskmem: 7,
-            max_cond_frames_in_attn: 4,
-            keep_first_cond_frame: false,
-            max_obj_ptrs_in_encoder: 16,
-            memory_temporal_stride_for_eval: 1,
-            non_overlap_masks_for_mem_enc: false,
-            multimask_output_in_sam: true,
-            multimask_output_for_tracking: true,
-            multimask_min_pt_num: 0,
-            multimask_max_pt_num: 1,
-            use_memory_selection: apply_temporal_disambiguation,
-            mf_threshold: 0.01,
-            sigmoid_scale_for_mem_enc: 20.0,
-            sigmoid_bias_for_mem_enc: -10.0,
-            maskmem_backbone: Sam3TrackerMaskmemBackboneConfig {
-                out_dim: 64,
-                position_encoding: Sam3TrackerPositionEncodingConfig {
-                    num_pos_feats: 64,
-                    normalize: true,
-                    scale: None,
-                    temperature: 10_000.0,
-                    precompute_resolution: 1008,
-                },
-                mask_downsampler: Sam3TrackerMaskDownsamplerConfig {
-                    kernel_size: 3,
-                    stride: 2,
-                    padding: 1,
-                    interpol_size: [1152, 1152],
-                },
-                cx_block: Sam3TrackerCxBlockConfig {
-                    dim: 256,
-                    kernel_size: 7,
-                    padding: 3,
-                    layer_scale_init_value: 1.0e-6,
-                    use_dwconv: true,
-                },
-                fuser: Sam3TrackerFuserConfig { num_layers: 2 },
-            },
-            transformer: Sam3TrackerTransformerConfig {
-                self_attention: Sam3TrackerAttentionConfig {
-                    embedding_dim: 256,
-                    num_heads: 1,
-                    downsample_rate: 1,
-                    dropout: 0.1,
-                    kv_in_dim: None,
-                    rope_theta: 10_000.0,
-                    feat_sizes: [72, 72],
-                    rope_k_repeat: false,
-                    use_fa3: false,
-                    use_rope_real: false,
-                },
-                cross_attention: Sam3TrackerAttentionConfig {
-                    embedding_dim: 256,
-                    num_heads: 1,
-                    downsample_rate: 1,
-                    dropout: 0.1,
-                    kv_in_dim: Some(64),
-                    rope_theta: 10_000.0,
-                    feat_sizes: [72, 72],
-                    rope_k_repeat: true,
-                    use_fa3: false,
-                    use_rope_real: false,
-                },
-                layer: Sam3TrackerTransformerLayerConfig {
-                    cross_attention_first: false,
-                    activation: Sam3TrackerActivation::Relu,
-                    dim_feedforward: 2048,
-                    dropout: 0.1,
-                    pos_enc_at_attn: false,
-                    pre_norm: true,
-                    d_model: 256,
-                    pos_enc_at_cross_attn_keys: true,
-                    pos_enc_at_cross_attn_queries: false,
-                },
-                encoder: Sam3TrackerTransformerEncoderConfig {
-                    remove_cross_attention_layers: vec![],
-                    batch_first: true,
-                    d_model: 256,
-                    frozen: false,
-                    pos_enc_at_input: true,
-                    num_layers: 4,
-                    use_act_checkpoint: false,
-                },
-                d_model: 256,
-            },
-            prompt_encoder: Sam3TrackerPromptEncoderConfig {
-                embed_dim: 256,
-                image_embedding_size: [72, 72],
-                input_image_size: [1008, 1008],
-                mask_in_chans: 16,
-                mask_input_size: [288, 288],
-            },
-            mask_decoder: Sam3TrackerMaskDecoderConfig {
-                num_multimask_outputs: 3,
-                transformer_depth: 2,
-                transformer_embedding_dim: 256,
-                transformer_mlp_dim: 2048,
-                transformer_num_heads: 8,
-                transformer_dim: 256,
-                iou_head_depth: 3,
-                iou_head_hidden_dim: 256,
-                use_high_res_features: true,
-                iou_prediction_use_sigmoid: true,
-                pred_obj_scores: true,
-                pred_obj_scores_mlp: true,
-                use_multimask_token_for_obj_ptr: true,
-                dynamic_multimask_via_stability: true,
-                dynamic_multimask_stability_delta: 0.05,
-                dynamic_multimask_stability_thresh: 0.98,
-            },
-            predictor: Sam3TrackerPredictorConfig {
-                with_backbone: false,
-                forward_backbone_per_frame_for_eval: true,
-                trim_past_non_cond_mem_for_eval: false,
-                offload_output_to_cpu_for_eval: false,
-                clear_non_cond_mem_around_input: true,
-                clear_non_cond_mem_for_multi_obj: false,
-                fill_hole_area: 16,
-                always_start_from_first_ann_frame: false,
-                max_point_num_in_prompt_enc: 16,
-                non_overlap_masks_for_output: false,
-                iter_use_prev_mask_pred: true,
-                add_all_frames_to_correct_as_cond: true,
-                use_prev_mem_frame: false,
-                use_stateless_refinement: false,
-                refinement_detector_cond_frame_removal_window: 16,
-                hotstart_delay: if apply_temporal_disambiguation { 15 } else { 0 },
-                hotstart_unmatch_thresh: if apply_temporal_disambiguation { 8 } else { 0 },
-                hotstart_dup_thresh: if apply_temporal_disambiguation { 8 } else { 0 },
-                suppress_overlapping_based_on_recent_occlusion_threshold: 0.7,
-                masklet_confirmation_enable: false,
-                masklet_confirmation_consecutive_det_thresh: 3,
-                compile_all_components: false,
-            },
-            shapes: Sam3TrackerShapeSpec {
-                image_embedding_size: 72,
-                low_res_mask_size: 288,
-                input_mask_size: 1152,
-                attention_feat_sizes: [72, 72],
-                mask_downsample_weight_shape: [1, 1, 4, 4],
-                maskmem_tpos_enc_shape: [7, 1, 1, 64],
-                no_mem_embed_shape: [1, 1, 256],
-                no_mem_pos_enc_shape: [1, 1, 256],
-                no_obj_ptr_shape: [1, 256],
-                no_obj_embed_spatial_shape: [1, 64],
-                obj_ptr_proj_weight_shapes: vec![[256, 256], [256, 256], [256, 256]],
-                obj_ptr_proj_bias_shapes: vec![[256], [256], [256]],
-                obj_ptr_tpos_proj_weight_shape: [64, 256],
-                obj_ptr_tpos_proj_bias_shape: [64],
-            },
-        }
+        Sam3TrackerConfig::build_tracker(apply_temporal_disambiguation)
     }
 
     fn dummy_visual(device: &candle::Device) -> Result<VisualBackboneOutput> {
@@ -262,6 +106,8 @@ mod tests {
             vision_pos_enc: vec![pos0, pos1, pos2],
             sam2_backbone_fpn: None,
             sam2_pos_enc: None,
+            tracker_sequences: None,
+            tracker_sam2_sequences: None,
         })
     }
 
@@ -274,8 +120,28 @@ mod tests {
             object_score_logits: Tensor::zeros((1, 1), DType::F32, device)?,
             maskmem_features: None,
             maskmem_pos_enc: None,
+            maskmem_prompt_features: None,
+            maskmem_prompt_pos_enc: None,
             is_cond_frame: true,
         })
+    }
+
+    fn normalize_point_coords(coords: &Tensor, device: &Device) -> Result<Tensor> {
+        let coords = coords.to_device(device)?.to_dtype(DType::F32)?;
+        match coords.rank() {
+            2 => coords.unsqueeze(0),
+            3 => Ok(coords),
+            rank => candle::bail!("tracker point coords must have rank 2 or 3, got {rank}"),
+        }
+    }
+
+    fn normalize_point_labels(labels: &Tensor, device: &Device) -> Result<Tensor> {
+        let labels = labels.to_device(device)?.to_dtype(DType::F32)?;
+        match labels.rank() {
+            1 => labels.unsqueeze(0),
+            2 => Ok(labels),
+            rank => candle::bail!("tracker point labels must have rank 1 or 2, got {rank}"),
+        }
     }
 
     #[derive(Debug, Deserialize)]
@@ -389,58 +255,52 @@ mod tests {
     impl TrackerFixtureBundle {
         fn debug_dir(self) -> &'static str {
             match self {
-                Self::Default => "../candle-examples/examples/sam3/reference_video_box_debug/debug",
+                Self::Default => "reference_video_box_debug/debug",
                 Self::TemporalDisambiguation => {
-                    "../candle-examples/examples/sam3/reference_video_box_debug_temporal_disambiguation/debug"
+                    "reference_video_box_debug_temporal_disambiguation/debug"
                 }
                 Self::LongHistoryStride1 => {
-                    "../candle-examples/examples/sam3/reference_video_long_history_stride1_debug/debug"
+                    "reference_video_long_history_stride1_debug/debug"
                 }
                 Self::LongHistoryObjPtrOverflow => {
-                    "../candle-examples/examples/sam3/reference_video_long_history_obj_ptr_overflow_debug/debug"
+                    "reference_video_long_history_obj_ptr_overflow_debug/debug"
                 }
                 Self::LongHistoryStrideGt1 => {
-                    "../candle-examples/examples/sam3/reference_video_long_history_stride_gt1_debug/debug"
+                    "reference_video_long_history_stride_gt1_debug/debug"
                 }
                 Self::LongHistoryKeepFirstCond => {
-                    "../candle-examples/examples/sam3/reference_video_long_history_keep_first_cond_debug/debug"
+                    "reference_video_long_history_keep_first_cond_debug/debug"
                 }
                 Self::LongHistoryTemporalDisambiguation => {
-                    "../candle-examples/examples/sam3/reference_video_long_history_temporal_disambiguation_debug/debug"
+                    "reference_video_long_history_temporal_disambiguation_debug/debug"
                 }
                 Self::LongHistoryTrimMem => {
-                    "../candle-examples/examples/sam3/reference_video_long_history_trim_mem_debug/debug"
+                    "reference_video_long_history_trim_mem_debug/debug"
                 }
                 Self::PointSingleClick => {
-                    "../candle-examples/examples/sam3/reference_video_point_debug_single_click/debug"
+                    "reference_video_point_debug_single_click/debug"
                 }
                 Self::PointMultiClick => {
-                    "../candle-examples/examples/sam3/reference_video_point_debug_multi_click/debug"
+                    "reference_video_point_debug_multi_click/debug"
                 }
                 Self::PointAllPoints => {
-                    "../candle-examples/examples/sam3/reference_video_point_debug_all_points/debug"
+                    "reference_video_point_debug_all_points/debug"
                 }
-                Self::MaskDirect => {
-                    "../candle-examples/examples/sam3/reference_video_mask_debug/debug"
-                }
-                Self::MemNonOverlap => {
-                    "../candle-examples/examples/sam3/reference_video_mem_non_overlap_debug/debug"
-                }
-                Self::OffloadOutputCpu => {
-                    "../candle-examples/examples/sam3/reference_video_offload_output_cpu_debug/debug"
-                }
+                Self::MaskDirect => "reference_video_mask_debug/debug",
+                Self::MemNonOverlap => "reference_video_mem_non_overlap_debug/debug",
+                Self::OffloadOutputCpu => "reference_video_offload_output_cpu_debug/debug",
                 Self::MultimaskDisabledTracking => {
-                    "../candle-examples/examples/sam3/reference_video_multimask_disabled_tracking_debug/debug"
+                    "reference_video_multimask_disabled_tracking_debug/debug"
                 }
                 Self::MultimaskDisabledSam => {
-                    "../candle-examples/examples/sam3/reference_video_multimask_disabled_sam_debug/debug"
+                    "reference_video_multimask_disabled_sam_debug/debug"
                 }
             }
         }
     }
 
     fn tracker_fixture_dir(bundle: TrackerFixtureBundle) -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(bundle.debug_dir())
+        paths::bundle_root().join(bundle.debug_dir())
     }
 
     fn tracker_fixture_tensor_path(bundle: TrackerFixtureBundle) -> PathBuf {
@@ -658,6 +518,8 @@ mod tests {
             vision_pos_enc: vec![pos0, pos1, pos2],
             sam2_backbone_fpn: None,
             sam2_pos_enc: None,
+            tracker_sequences: None,
+            tracker_sam2_sequences: None,
         })
     }
 
@@ -790,98 +652,10 @@ mod tests {
         token_atol: f32,
         object_score_atol: f32,
     ) -> Result<()> {
-        let Some(model) = load_runtime_tracker_model_from_bundle(bundle)? else {
-            return Ok(());
-        };
-        let manifest = load_tracker_internal_manifest(bundle)?;
-        let stage = tracker_record(&manifest, 0, "sam_mask_decoder")?;
-        let image_embeddings = load_tracker_fixture_tensor(
-            bundle,
-            stage.tensor_keys["mask_decoder_inputs.image_embeddings"].as_str(),
-        )?
-        .to_dtype(DType::F32)?;
-        let image_pe = load_tracker_fixture_tensor(
-            bundle,
-            stage.tensor_keys["mask_decoder_inputs.image_pe"].as_str(),
-        )?
-        .to_dtype(DType::F32)?;
-        let sparse_prompt_embeddings = load_tracker_fixture_tensor(
-            bundle,
-            stage.tensor_keys["mask_decoder_inputs.sparse_prompt_embeddings"].as_str(),
-        )?
-        .to_dtype(DType::F32)?;
-        let dense_prompt_embeddings = load_tracker_fixture_tensor(
-            bundle,
-            stage.tensor_keys["mask_decoder_inputs.dense_prompt_embeddings"].as_str(),
-        )?
-        .to_dtype(DType::F32)?;
-        let high_res_features = if stage
-            .tensor_keys
-            .contains_key("mask_decoder_inputs.high_res_features.0")
-        {
-            Some(vec![
-                load_tracker_fixture_tensor(
-                    bundle,
-                    stage.tensor_keys["mask_decoder_inputs.high_res_features.0"].as_str(),
-                )?
-                .to_dtype(DType::F32)?,
-                load_tracker_fixture_tensor(
-                    bundle,
-                    stage.tensor_keys["mask_decoder_inputs.high_res_features.1"].as_str(),
-                )?
-                .to_dtype(DType::F32)?,
-            ])
-        } else {
-            None
-        };
-        let (low_res_multimasks, ious, sam_output_tokens, object_score_logits) =
-            model.sam_mask_decoder.forward(
-                &image_embeddings,
-                &image_pe,
-                &sparse_prompt_embeddings,
-                &dense_prompt_embeddings,
-                stage.metadata["multimask_output"]
-                    .as_bool()
-                    .unwrap_or(false),
-                stage.metadata["repeat_image"].as_bool().unwrap_or(false),
-                high_res_features.as_deref(),
-            )?;
-        let expected_low_res_multimasks = load_tracker_fixture_tensor(
-            bundle,
-            stage.tensor_keys["mask_decoder_output.low_res_multimasks"].as_str(),
-        )?;
-        let expected_ious = load_tracker_fixture_tensor(
-            bundle,
-            stage.tensor_keys["mask_decoder_output.ious"].as_str(),
-        )?;
-        let expected_sam_output_tokens = load_tracker_fixture_tensor(
-            bundle,
-            stage.tensor_keys["mask_decoder_output.sam_output_tokens"].as_str(),
-        )?;
-        let expected_object_score_logits = load_tracker_fixture_tensor(
-            bundle,
-            stage.tensor_keys["mask_decoder_output.object_score_logits"].as_str(),
-        )?;
-        assert_tensor_close(
-            "mask decoder low_res_multimasks",
-            &low_res_multimasks,
-            &expected_low_res_multimasks,
-            low_res_atol,
-        )?;
-        assert_tensor_close("mask decoder ious", &ious, &expected_ious, iou_atol)?;
-        assert_tensor_close(
-            "mask decoder sam_output_tokens",
-            &sam_output_tokens,
-            &expected_sam_output_tokens,
-            token_atol,
-        )?;
-        assert_tensor_close(
-            "mask decoder object_score_logits",
-            &object_score_logits,
-            &expected_object_score_logits,
-            object_score_atol,
-        )?;
-        Ok(())
+        let _ = (bundle, low_res_atol, iou_atol, token_atol, object_score_atol);
+        candle::bail!(
+            "raw sam_mask_decoder fixture checks require an additional Candle parity accessor for Sam3TrackerModel::sam_mask_decoder.forward"
+        )
     }
 
     fn assert_forward_sam_heads_fixture_matches(
@@ -946,7 +720,7 @@ mod tests {
         } else {
             None
         };
-        let actual = model.forward_sam_heads(
+        let actual = model.parity_forward_sam_heads(
             &backbone_features,
             point_prompt.as_ref(),
             mask_inputs.as_ref(),
@@ -1162,6 +936,8 @@ mod tests {
                 object_score_logits,
                 maskmem_features,
                 maskmem_pos_enc,
+                maskmem_prompt_features: None,
+                maskmem_prompt_pos_enc: None,
                 is_cond_frame,
             }));
         }
@@ -1177,6 +953,8 @@ mod tests {
                 object_score_logits,
                 maskmem_features: None,
                 maskmem_pos_enc: None,
+                maskmem_prompt_features: None,
+                maskmem_prompt_pos_enc: None,
                 is_cond_frame,
             }));
         };
@@ -1207,6 +985,8 @@ mod tests {
             object_score_logits,
             maskmem_features,
             maskmem_pos_enc,
+            maskmem_prompt_features: None,
+            maskmem_prompt_pos_enc: None,
             is_cond_frame,
         }))
     }
@@ -1271,6 +1051,8 @@ mod tests {
             object_score_logits,
             maskmem_features: Some(maskmem_features),
             maskmem_pos_enc: Some(maskmem_pos_enc),
+            maskmem_prompt_features: None,
+            maskmem_prompt_pos_enc: None,
             is_cond_frame: true,
         }))
     }
@@ -1334,6 +1116,8 @@ mod tests {
             object_score_logits,
             maskmem_features: Some(maskmem_features),
             maskmem_pos_enc: Some(maskmem_pos_enc),
+            maskmem_prompt_features: None,
+            maskmem_prompt_pos_enc: None,
             is_cond_frame: false,
         }))
     }
@@ -1423,6 +1207,8 @@ mod tests {
                     object_score_logits,
                     maskmem_features: None,
                     maskmem_pos_enc: None,
+                    maskmem_prompt_features: None,
+                    maskmem_prompt_pos_enc: None,
                     is_cond_frame: false,
                 },
             );
@@ -1442,7 +1228,7 @@ mod tests {
         let manifest = load_tracker_internal_manifest(bundle)?;
         let track_step = tracker_record(&manifest, frame_idx, "track_step")?;
         let prepare = tracker_record(&manifest, frame_idx, "prepare_memory_conditioned_features")?;
-        let compute_dtype = model.no_obj_ptr.dtype();
+        let compute_dtype = model.parity_compute_dtype();
         let current_vision_feats = vec![load_tracker_fixture_tensor(
             bundle,
             track_step.tensor_keys["current_vision_feats"].as_str(),
@@ -1458,22 +1244,23 @@ mod tests {
             &manifest,
             prepare,
             frame_idx,
-            model.config.image_size,
+            model.config().image_size,
             compute_dtype,
         )?;
-        let actual = model.prepare_memory_conditioned_features(
+        let actual = model.parity_prepare_memory_conditioned_features(
             frame_idx,
             false,
             current_vision_feats.as_slice(),
             current_vision_pos_embeds.as_slice(),
             &[(
-                model.config.image_embedding_size(),
-                model.config.image_embedding_size(),
+                model.config().image_embedding_size(),
+                model.config().image_embedding_size(),
             )],
             &history,
             30,
             false,
             true,
+            None,
         )?;
         let expected_cond =
             metadata_usize_vec(&prepare.metadata, "selected_conditioning_frame_indices")?;
@@ -1508,7 +1295,7 @@ mod tests {
             bundle,
             prepare.tensor_keys["object_pointer_temporal_pos_enc"].as_str(),
         )?;
-        let actual_pos = model.get_tpos_enc(
+        let actual_pos = model.parity_get_tpos_enc(
             offsets.as_slice(),
             &candle::Device::Cpu,
             Some(max_abs_pos),
@@ -1540,19 +1327,15 @@ mod tests {
             &manifest,
             prepare,
             frame_idx,
-            model.config.image_size,
-            model.no_obj_ptr.dtype(),
+            model.config().image_size,
+            model.parity_compute_dtype(),
         )?;
-        let cond_frame_outputs = history
-            .iter()
-            .filter_map(|(frame, state)| state.is_cond_frame.then_some((*frame, state)))
-            .collect::<BTreeMap<_, _>>();
-        let prepared = model.build_memory_conditioning_prompt(
+        let prepared = model.parity_build_memory_conditioning_prompt(
             frame_idx,
             &history,
             30,
             false,
-            &cond_frame_outputs,
+            None,
         )?;
         let expected_prompt =
             load_tracker_fixture_tensor(bundle, encoder.tensor_keys["prompt"].as_str())?;
@@ -1598,26 +1381,26 @@ mod tests {
             bundle,
             track_step.tensor_keys["current_vision_feats"].as_str(),
         )?
-        .to_dtype(model.no_obj_ptr.dtype())?
+        .to_dtype(model.parity_compute_dtype())?
         .transpose(0, 1)?;
         let src_pos = load_tracker_fixture_tensor(
             bundle,
             track_step.tensor_keys["current_vision_pos_embeds"].as_str(),
         )?
-        .to_dtype(model.no_obj_ptr.dtype())?
+        .to_dtype(model.parity_compute_dtype())?
         .transpose(0, 1)?;
         let prompt = load_tracker_fixture_tensor(bundle, encoder.tensor_keys["prompt"].as_str())?
-            .to_dtype(model.no_obj_ptr.dtype())?
+            .to_dtype(model.parity_compute_dtype())?
             .transpose(0, 1)?;
         let prompt_pos =
             load_tracker_fixture_tensor(bundle, encoder.tensor_keys["prompt_pos"].as_str())?
-                .to_dtype(model.no_obj_ptr.dtype())?
+                .to_dtype(model.parity_compute_dtype())?
                 .transpose(0, 1)?;
         let expected_memory = load_tracker_fixture_tensor(
             bundle,
             encoder.tensor_keys["memory_transformer_encoder_output.memory"].as_str(),
         )?;
-        let actual = model.memory_transformer.forward(
+        let actual = model.parity_memory_transformer_forward(
             &src,
             &prompt,
             Some(&src_pos),
@@ -1651,47 +1434,43 @@ mod tests {
             &manifest,
             prepare,
             frame_idx,
-            model.config.image_size,
-            model.no_obj_ptr.dtype(),
+            model.config().image_size,
+            model.parity_compute_dtype(),
         )?;
-        let cond_frame_outputs = history
-            .iter()
-            .filter_map(|(frame, state)| state.is_cond_frame.then_some((*frame, state)))
-            .collect::<BTreeMap<_, _>>();
-        let prepared = model.build_memory_conditioning_prompt(
+        let prepared = model.parity_build_memory_conditioning_prompt(
             frame_idx,
             &history,
             30,
             false,
-            &cond_frame_outputs,
+            None,
         )?;
         let src = load_tracker_fixture_tensor(
             bundle,
             track_step.tensor_keys["current_vision_feats"].as_str(),
         )?
-        .to_dtype(model.no_obj_ptr.dtype())?
+        .to_dtype(model.parity_compute_dtype())?
         .transpose(0, 1)?;
         let src_pos = load_tracker_fixture_tensor(
             bundle,
             track_step.tensor_keys["current_vision_pos_embeds"].as_str(),
         )?
-        .to_dtype(model.no_obj_ptr.dtype())?
+        .to_dtype(model.parity_compute_dtype())?
         .transpose(0, 1)?;
         let prompt = prepared
             .prompt
             .ok_or_else(|| candle::Error::Msg("expected reconstructed prompt".into()))?
-            .to_dtype(model.no_obj_ptr.dtype())?
+            .to_dtype(model.parity_compute_dtype())?
             .transpose(0, 1)?;
         let prompt_pos = prepared
             .prompt_pos
             .ok_or_else(|| candle::Error::Msg("expected reconstructed prompt_pos".into()))?
-            .to_dtype(model.no_obj_ptr.dtype())?
+            .to_dtype(model.parity_compute_dtype())?
             .transpose(0, 1)?;
         let expected_memory = load_tracker_fixture_tensor(
             bundle,
             encoder.tensor_keys["memory_transformer_encoder_output.memory"].as_str(),
         )?;
-        let actual = model.memory_transformer.forward(
+        let actual = model.parity_memory_transformer_forward(
             &src,
             &prompt,
             Some(&src_pos),
@@ -1763,6 +1542,8 @@ mod tests {
             vision_pos_enc: vec![pos],
             sam2_backbone_fpn: None,
             sam2_pos_enc: None,
+            tracker_sequences: None,
+            tracker_sam2_sequences: None,
         })
     }
 
@@ -1794,7 +1575,7 @@ mod tests {
             bundle,
             &manifest,
             frame_idx,
-            model.config.image_embedding_size(),
+            model.config().image_embedding_size(),
         )?;
         let high_res_masks = load_tracker_fixture_tensor(
             bundle,
@@ -1852,7 +1633,5 @@ mod tests {
         Ok(())
     }
 
-    // Raw extracted support scaffold from the in-tree Candle parity harness.
-    // This file is intentionally parked until the external crate can activate
-    // it against feature-gated Candle parity-support APIs.
+    include!("tracker_parity.rs");
 }

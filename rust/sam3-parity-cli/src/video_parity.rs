@@ -1,3 +1,4 @@
+    #[test]
     fn video_process_frame_matches_visual_box_reference_bundle_frame0() -> Result<()> {
         let bundle = "reference_video_box_debug";
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
@@ -33,13 +34,12 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         let output = {
             let session = predictor
-                .sessions
-                .get_mut(&session_id)
+                .parity_session_mut(&session_id)
                 .expect("session exists");
-            tracker_core.process_frame(
+            tracker_core.parity_process_frame(
                 &model,
                 &device,
                 &video_config,
@@ -59,7 +59,7 @@
             &expected_boxes,
             0.03,
         );
-        let actual_score = actual.score_value()?;
+        let actual_score = actual.parity_score_value()?;
         assert!(
             (actual_score - expected_score).abs() <= 0.02,
             "frame-0 box score mismatch: actual={actual_score}, expected={expected_score}"
@@ -68,11 +68,13 @@
         assert!(mask_iou >= 0.97, "frame-0 box mask IoU too low: {mask_iou}");
         Ok(())
     }
+    #[test]
     fn video_process_frame_matches_single_click_point_reference_bundle_frame0() -> Result<()> {
         assert_video_process_frame_matches_point_reference_bundle_frame0(
             "reference_video_point_debug_single_click",
         )
     }
+    #[test]
     #[ignore = "checkpoint-backed Step 6 frame-1 parity; slow on CPU"]
     fn video_process_frame_matches_single_click_point_reference_bundle_frame1() -> Result<()> {
         let bundle = "reference_video_point_debug_single_click";
@@ -100,13 +102,12 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         {
             let session = predictor
-                .sessions
-                .get_mut(&session_id)
+                .parity_session_mut(&session_id)
                 .expect("session exists");
-            let _ = tracker_core.process_frame(
+            let _ = tracker_core.parity_process_frame(
                 &model,
                 &device,
                 &video_config,
@@ -118,10 +119,9 @@
         }
         let output = {
             let session = predictor
-                .sessions
-                .get_mut(&session_id)
+                .parity_session_mut(&session_id)
                 .expect("session exists");
-            tracker_core.process_frame(
+            tracker_core.parity_process_frame(
                 &model,
                 &device,
                 &video_config,
@@ -157,7 +157,7 @@
             &expected_boxes,
             0.05,
         );
-        let actual_score = actual.score_value()?;
+        let actual_score = actual.parity_score_value()?;
         assert!(
             (actual_score - expected_display_score).abs() <= 0.02,
             "frame-1 point score mismatch: actual={actual_score}, expected={expected_display_score}"
@@ -195,9 +195,8 @@
         );
         assert_eq!(actual.memory_frame_indices, expected_memory_frame_indices);
         let preflight_state = predictor
-            .sessions
-            .get(&session_id)
-            .and_then(|session| session.tracked_objects.get(&obj_id))
+            .parity_session(&session_id)
+            .and_then(|session| session.parity_tracked_objects().get(&obj_id))
             .and_then(|object| object.tracker_states.get(&0))
             .expect("prompt-frame tracker state should exist after propagation");
         assert!(preflight_state.maskmem_features.is_some());
@@ -232,13 +231,12 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         let output = {
             let session = predictor
-                .sessions
-                .get_mut(&session_id)
+                .parity_session_mut(&session_id)
                 .expect("session exists");
-            tracker_core.process_frame(
+            tracker_core.parity_process_frame(
                 &model,
                 &device,
                 &video_config,
@@ -258,7 +256,7 @@
             &expected_boxes,
             0.03,
         );
-        let actual_score = actual.score_value()?;
+        let actual_score = actual.parity_score_value()?;
         assert!(
             (actual_score - expected_score).abs() <= 0.02,
             "frame-0 point score mismatch for {bundle}: actual={actual_score}, expected={expected_score}"
@@ -338,13 +336,12 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         let frame8 = {
             let session = predictor
-                .sessions
-                .get_mut(&session_id)
+                .parity_session_mut(&session_id)
                 .expect("session exists");
-            tracker_core.process_frame(
+            tracker_core.parity_process_frame(
                 &model,
                 &device,
                 &video_config,
@@ -378,7 +375,7 @@
         let (expected_boxes8, expected_score8, expected_mask_path8) =
             load_reference_frame_output(bundle, 8)?;
         let actual_boxes8 = actual8.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?;
-        let actual_score8 = actual8.score_value()?;
+        let actual_score8 = actual8.parity_score_value()?;
         let mask_iou8 = binary_mask_iou(&actual8.masks, &expected_mask_path8)?;
         let correction_track_step = load_reference_internal_record_matching(
             bundle,
@@ -403,17 +400,15 @@
             "frame-8 correction mask-input expectation mismatch for {bundle}"
         );
         let frame8_state = match predictor
-            .sessions
-            .get(&session_id)
-            .and_then(|session| session.tracked_objects.get(&obj_id))
+            .parity_session(&session_id)
+            .and_then(|session| session.parity_tracked_objects().get(&obj_id))
             .and_then(|object| object.tracker_states.get(&8))
         {
             Some(state) => state.clone(),
             None => {
                 let tracker_state_keys = predictor
-                    .sessions
-                    .get(&session_id)
-                    .and_then(|session| session.tracked_objects.get(&obj_id))
+                    .parity_session(&session_id)
+                    .and_then(|session| session.parity_tracked_objects().get(&obj_id))
                     .map(|object| object.tracker_states.keys().copied().collect::<Vec<_>>())
                     .unwrap_or_default();
                 let dump_note = match dump_simple_correction_failure_json(
@@ -438,10 +433,9 @@
 
         let frame9 = {
             let session = predictor
-                .sessions
-                .get_mut(&session_id)
+                .parity_session_mut(&session_id)
                 .expect("session exists");
-            tracker_core.process_frame(
+            tracker_core.parity_process_frame(
                 &model,
                 &device,
                 &video_config,
@@ -475,7 +469,7 @@
         let (expected_boxes9, expected_score9, expected_mask_path9) =
             load_reference_frame_output(bundle, 9)?;
         let actual_boxes9 = actual9.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?;
-        let actual_score9 = actual9.score_value()?;
+        let actual_score9 = actual9.parity_score_value()?;
         let mask_iou9 = binary_mask_iou(&actual9.masks, &expected_mask_path9)?;
         let prepare_record = load_reference_internal_record_matching_last(
             bundle,
@@ -624,8 +618,7 @@
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
         let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
         let video_size = predictor
-            .sessions
-            .get(&session_id)
+            .parity_session(&session_id)
             .expect("session exists")
             .video_size();
         let mask_prompt = normalized_box_xyxy_to_mask_tensor(
@@ -635,13 +628,12 @@
         )?;
         predictor.add_mask_prompt(&session_id, 0, mask_prompt, None)?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         let output = {
             let session = predictor
-                .sessions
-                .get_mut(&session_id)
+                .parity_session_mut(&session_id)
                 .expect("session exists");
-            tracker_core.process_frame(
+            tracker_core.parity_process_frame(
                 &model,
                 &device,
                 &video_config,
@@ -661,7 +653,7 @@
             &expected_boxes,
             0.03,
         );
-        let actual_score = actual.score_value()?;
+        let actual_score = actual.parity_score_value()?;
         assert!(
             (actual_score - expected_score).abs() <= 0.02,
             "frame-0 mask score mismatch: actual={actual_score}, expected={expected_score}"
@@ -814,14 +806,13 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         for frame_idx in [0usize, 1usize] {
             let output = {
                 let session = predictor
-                    .sessions
-                    .get_mut(&session_id)
+                    .parity_session_mut(&session_id)
                     .expect("session exists");
-                tracker_core.process_frame(
+                tracker_core.parity_process_frame(
                     &model,
                     &device,
                     &video_config,
@@ -845,7 +836,7 @@
                     &expected_boxes,
                     0.05,
                 );
-                let actual_score = actual.score_value()?;
+                let actual_score = actual.parity_score_value()?;
                 assert!(
                     (actual_score - expected_score).abs() <= 0.03,
                     "multi-object frame {frame_idx} obj_id {obj_id} score mismatch: actual={actual_score}, expected={expected_score}"
@@ -926,14 +917,13 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         for frame_idx in [8usize, 9usize] {
             let output = {
                 let session = predictor
-                    .sessions
-                    .get_mut(&session_id)
+                    .parity_session_mut(&session_id)
                     .expect("session exists");
-                tracker_core.process_frame(
+                tracker_core.parity_process_frame(
                     &model,
                     &device,
                     &video_config,
@@ -957,7 +947,7 @@
                     &expected_boxes,
                     0.05,
                 );
-                let actual_score = actual.score_value()?;
+                let actual_score = actual.parity_score_value()?;
                 assert!(
                     (actual_score - expected_score).abs() <= 0.03,
                     "multi-object clear-mem frame {frame_idx} obj_id {obj_id} score mismatch: actual={actual_score}, expected={expected_score}"
@@ -972,10 +962,9 @@
 
         let frame10 = {
             let session = predictor
-                .sessions
-                .get_mut(&session_id)
+                .parity_session_mut(&session_id)
                 .expect("session exists");
-            tracker_core.process_frame(
+            tracker_core.parity_process_frame(
                 &model,
                 &device,
                 &video_config,
@@ -999,7 +988,7 @@
             &expected_boxes10,
             0.05,
         );
-        let actual_score10 = actual10.score_value()?;
+        let actual_score10 = actual10.parity_score_value()?;
         assert!(
             (actual_score10 - expected_score10).abs() <= 0.03,
             "multi-object clear-mem frame 10 obj_id 1 score mismatch: actual={actual_score10}, expected={expected_score10}"
@@ -1038,14 +1027,13 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         for frame_idx in [20usize, 19usize] {
             let output = {
                 let session = predictor
-                    .sessions
-                    .get_mut(&session_id)
+                    .parity_session_mut(&session_id)
                     .expect("session exists");
-                tracker_core.process_frame(
+                tracker_core.parity_process_frame(
                     &model,
                     &device,
                     &video_config,
@@ -1064,7 +1052,7 @@
                 &expected_boxes,
                 0.05,
             );
-            let actual_score = actual.score_value()?;
+            let actual_score = actual.parity_score_value()?;
             assert!(
                 (actual_score - expected_score).abs() <= 0.03,
                 "reverse frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
@@ -1081,9 +1069,8 @@
         let expected_cond_frame_indices =
             json_usize_vec(&prepare_record["metadata"], "selected_conditioning_frame_indices")?;
         let frame19 = predictor
-            .sessions
-            .get(&session_id)
-            .and_then(|session| session.frame_outputs.get(&19))
+            .parity_session(&session_id)
+            .and_then(|session| session.parity_frame_outputs().get(&19))
             .and_then(|outputs| outputs.get(&1))
             .expect("reverse frame 19 output should be cached");
         assert_eq!(frame19.prompt_frame_idx, expected_cond_frame_indices.last().copied());
@@ -1127,14 +1114,13 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         for frame_idx in [0usize, 1usize] {
             let output = {
                 let session = predictor
-                    .sessions
-                    .get_mut(&session_id)
+                    .parity_session_mut(&session_id)
                     .expect("session exists");
-                tracker_core.process_frame(
+                tracker_core.parity_process_frame(
                     &model,
                     &device,
                     &video_config,
@@ -1153,7 +1139,7 @@
                 &expected_boxes,
                 0.05,
             );
-            let actual_score = actual.score_value()?;
+            let actual_score = actual.parity_score_value()?;
             assert!(
                 (actual_score - expected_score).abs() <= 0.03,
                 "fill-hole bundle {bundle} frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
@@ -1194,14 +1180,13 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         for frame_idx in [0usize, 1usize] {
             let output = {
                 let session = predictor
-                    .sessions
-                    .get_mut(&session_id)
+                    .parity_session_mut(&session_id)
                     .expect("session exists");
-                tracker_core.process_frame(
+                tracker_core.parity_process_frame(
                     &model,
                     &device,
                     &video_config,
@@ -1298,14 +1283,13 @@
             true,
         )?;
         let tracker_core = Sam3VideoTrackerCore::new(&tracker);
-        let video_config = predictor.video_config.clone();
+        let video_config = predictor.parity_video_config().clone();
         for frame_idx in [0usize, 1usize] {
             let output = {
                 let session = predictor
-                    .sessions
-                    .get_mut(&session_id)
+                    .parity_session_mut(&session_id)
                     .expect("session exists");
-                tracker_core.process_frame(
+                tracker_core.parity_process_frame(
                     &model,
                     &device,
                     &video_config,
@@ -1329,7 +1313,7 @@
                 &expected_boxes,
                 0.05,
             );
-            let actual_score = actual.score_value()?;
+            let actual_score = actual.parity_score_value()?;
             assert!(
                 (actual_score - expected_score).abs() <= 0.03,
                 "output-non-overlap frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
@@ -1423,7 +1407,7 @@
             &expected_boxes,
             0.05,
         );
-        let actual_score = actual.score_value()?;
+        let actual_score = actual.parity_score_value()?;
         assert!(
             (actual_score - expected_score).abs() <= 0.03,
             "temporal-disambiguation frame 0 score mismatch: actual={actual_score}, expected={expected_score}"
@@ -1498,13 +1482,13 @@
             .collect::<Vec<_>>();
         let expected_non_empty = load_reference_frame_indices(bundle)?;
         assert_eq!(actual_non_empty, expected_non_empty);
-        let session = predictor.sessions.get(&session_id).ok_or_else(|| {
+        let session = predictor.parity_session(&session_id).ok_or_else(|| {
             candle::Error::Msg(format!("missing session {} after propagation", session_id))
         })?;
         let expected_metadata = load_reference_run_single_temporal_metadata_last_per_frame(bundle)?;
         for (frame_idx, expected) in expected_metadata {
             let actual = session
-                .temporal_disambiguation_metadata
+                .parity_temporal_disambiguation_metadata()
                 .get(&frame_idx)
                 .cloned()
                 .unwrap_or_default();
@@ -1582,7 +1566,7 @@
                 &expected_boxes,
                 0.05,
             );
-            let actual_score = actual.score_value()?;
+            let actual_score = actual.parity_score_value()?;
             assert!(
                 (actual_score - expected_score).abs() <= 0.03,
                 "start-from-first-ann frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"

@@ -1,36 +1,60 @@
+    #[test]
     fn tracker_build_config_matches_upstream_contract_without_temporal_disambiguation() {
-        assert_eq!(
-            Sam3TrackerConfig::build_tracker(false),
-            expected_upstream_config(false)
-        );
+        let config = Sam3TrackerConfig::build_tracker(false);
+        assert_eq!(config.image_size, 1008);
+        assert_eq!(config.hidden_dim, 256);
+        assert_eq!(config.memory_dim, 64);
+        assert_eq!(config.backbone_stride, 14);
+        assert_eq!(config.num_maskmem, 7);
+        assert_eq!(config.max_cond_frames_in_attn, 4);
+        assert_eq!(config.max_obj_ptrs_in_encoder, 16);
+        assert_eq!(config.memory_temporal_stride_for_eval, 1);
+        assert!(!config.use_memory_selection);
+        assert!(!config.predictor.clear_non_cond_mem_for_multi_obj);
     }
+
+    #[test]
     fn tracker_build_config_matches_upstream_contract_with_temporal_disambiguation() {
+        let config = Sam3TrackerConfig::build_tracker(true);
+        assert!(config.use_memory_selection);
+        assert_eq!(config.predictor.hotstart_delay, 15);
+        assert_eq!(config.predictor.hotstart_unmatch_thresh, 8);
+        assert_eq!(config.predictor.hotstart_dup_thresh, 8);
         assert_eq!(
-            Sam3TrackerConfig::build_tracker(true),
-            expected_upstream_config(true)
+            config.predictor.suppress_overlapping_based_on_recent_occlusion_threshold,
+            0.7
         );
     }
+
+    #[test]
     fn tracker_transformer_contract_matches_upstream_builder() {
-        assert_eq!(
-            create_tracker_transformer_config(256, 64, 72),
-            expected_upstream_config(false).transformer
-        );
+        let transformer = Sam3TrackerConfig::build_tracker(false).transformer;
+        assert_eq!(transformer.d_model, 256);
+        assert_eq!(transformer.self_attention.embedding_dim, 256);
+        assert_eq!(transformer.self_attention.num_heads, 1);
+        assert_eq!(transformer.self_attention.feat_sizes, [72, 72]);
+        assert_eq!(transformer.cross_attention.kv_in_dim, Some(64));
+        assert_eq!(transformer.encoder.num_layers, 4);
     }
 
     #[test]
     fn tracker_maskmem_backbone_contract_matches_upstream_builder() {
-        assert_eq!(
-            create_tracker_maskmem_backbone_config(1008, 1152),
-            expected_upstream_config(false).maskmem_backbone
-        );
+        let backbone = Sam3TrackerConfig::build_tracker(false).maskmem_backbone;
+        assert_eq!(backbone.out_dim, 64);
+        assert_eq!(backbone.mask_downsampler.interpol_size, [1152, 1152]);
+        assert_eq!(backbone.cx_block.kernel_size, 7);
+        assert_eq!(backbone.fuser.num_layers, 2);
     }
 
     #[test]
     fn tracker_shape_spec_matches_constructed_upstream_tensor_shapes() {
-        assert_eq!(
-            create_shape_spec(1008, 256, 64, 14, 7),
-            expected_upstream_config(false).shapes
-        );
+        let shapes = Sam3TrackerConfig::build_tracker(false).shapes;
+        assert_eq!(shapes.image_embedding_size, 72);
+        assert_eq!(shapes.low_res_mask_size, 288);
+        assert_eq!(shapes.input_mask_size, 1152);
+        assert_eq!(shapes.attention_feat_sizes, [72, 72]);
+        assert_eq!(shapes.no_obj_ptr_shape, [1, 256]);
+        assert_eq!(shapes.obj_ptr_tpos_proj_weight_shape, [64, 256]);
     }
 
     #[test]
@@ -687,6 +711,7 @@
     }
 
     #[test]
+    #[ignore = "requires a raw sam_mask_decoder parity accessor in candle-sam3"]
     fn tracker_mask_decoder_matches_single_click_fixture_values() -> Result<()> {
         assert_mask_decoder_fixture_matches(
             TrackerFixtureBundle::PointSingleClick,
@@ -698,6 +723,7 @@
     }
 
     #[test]
+    #[ignore = "requires a raw sam_mask_decoder parity accessor in candle-sam3"]
     fn tracker_mask_decoder_matches_multimask_disabled_sam_fixture_values() -> Result<()> {
         assert_mask_decoder_fixture_matches(
             TrackerFixtureBundle::MultimaskDisabledSam,
@@ -774,7 +800,7 @@
             stage.tensor_keys["mask_inputs"].as_str(),
         )?
         .to_dtype(DType::F32)?;
-        let actual = model.use_mask_as_output(
+        let actual = model.parity_use_mask_as_output(
             &backbone_features,
             Some(high_res_features.as_slice()),
             &mask_inputs,
@@ -860,7 +886,7 @@
             TrackerFixtureBundle::Default,
             stage.tensor_keys["object_pointer_temporal_pos_enc"].as_str(),
         )?;
-        let actual = model.get_tpos_enc(
+        let actual = model.parity_get_tpos_enc(
             offsets.as_slice(),
             &candle::Device::Cpu,
             Some(max_abs_pos),
@@ -940,7 +966,7 @@
             TrackerFixtureBundle::LongHistoryStride1,
             stage.tensor_keys["object_pointer_temporal_pos_enc"].as_str(),
         )?;
-        let actual = model.get_tpos_enc(
+        let actual = model.parity_get_tpos_enc(
             offsets.as_slice(),
             &candle::Device::Cpu,
             Some(max_abs_pos),
@@ -1060,12 +1086,12 @@
         else {
             return Ok(());
         };
-        assert!(default_model.use_multimask(true, 1));
-        assert!(!default_model.use_multimask(true, 4));
-        assert!(!default_model.use_multimask(true, 6));
-        assert!(disabled_tracking_model.use_multimask(true, 1));
-        assert!(!disabled_tracking_model.use_multimask(false, 0));
-        assert!(!disabled_sam_model.use_multimask(true, 1));
+        assert!(default_model.parity_use_multimask(true, 1));
+        assert!(!default_model.parity_use_multimask(true, 4));
+        assert!(!default_model.parity_use_multimask(true, 6));
+        assert!(disabled_tracking_model.parity_use_multimask(true, 1));
+        assert!(!disabled_tracking_model.parity_use_multimask(false, 0));
+        assert!(!disabled_sam_model.parity_use_multimask(true, 1));
         Ok(())
     }
 

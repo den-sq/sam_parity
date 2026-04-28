@@ -13,6 +13,12 @@ mod video;
 
 #[cfg(all(test, feature = "full-parity"))]
 mod full_parity;
+#[cfg(all(test, feature = "full-parity"))]
+mod full_parity_support;
+#[cfg(all(test, feature = "full-parity"))]
+mod tracker_parity_harness;
+#[cfg(all(test, feature = "full-parity"))]
+mod video_parity_harness;
 
 use anyhow::{bail, Context, Error as E, Result};
 use clap::Parser;
