@@ -14,11 +14,11 @@ video tracking builders in `model_builder.py`.
 ## Current Step Status
 
 - `1a. Exporter infrastructure`
-  - implemented in `candle-examples/examples/sam3/export_reference.py`
+  - implemented in `python/sam3_parity/export_reference.py`
 - `1b. Required upstream bundle matrix definition and generation workflow`
   - implemented in:
-    - `candle-examples/examples/sam3/video_tracker_strict_port_matrix.json`
-    - `candle-examples/examples/sam3/generate_video_tracker_strict_port_matrix.py`
+    - `docs/video_tracker_strict_port_matrix.json`
+    - `python/sam3_parity/generate_video_tracker_strict_port_matrix.py`
 - `Stage 0 / export completeness`
   - all required matrix rows are now materialized on disk except the optional
     `video_forward_backbone_all_frames_debug` row
@@ -329,11 +329,11 @@ It is useful, but it is not sufficient for strict parity.
 
 The canonical source-controlled matrix is:
 
-- `candle-examples/examples/sam3/video_tracker_strict_port_matrix.json`
+- `docs/video_tracker_strict_port_matrix.json`
 
 The bundle names below must stay in sync with that manifest. The matrix generator is:
 
-- `candle-examples/examples/sam3/generate_video_tracker_strict_port_matrix.py`
+- `python/sam3_parity/generate_video_tracker_strict_port_matrix.py`
 
 The following upstream bundles are required before the corresponding local stage can be
 considered fully covered.

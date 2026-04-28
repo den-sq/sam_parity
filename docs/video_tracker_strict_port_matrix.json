@@ -31,7 +31,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_box_debug"
     },
     {
       "name": "video_box_debug_temporal_disambiguation",
@@ -60,7 +61,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_box_debug_temporal_disambiguation"
     },
     {
       "name": "video_point_debug_single_click",
@@ -90,7 +92,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_point_debug_single_click"
     },
     {
       "name": "video_point_debug_multi_click",
@@ -131,7 +134,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_point_debug_multi_click"
     },
     {
       "name": "video_point_debug_all_points",
@@ -171,7 +175,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_point_debug_all_points"
     },
     {
       "name": "video_mask_debug",
@@ -204,7 +209,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_mask_debug"
     },
     {
       "name": "video_correction_click_debug",
@@ -249,7 +255,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_correction_click_debug"
     },
     {
       "name": "video_correction_click_no_prev_mask_pred_debug",
@@ -296,7 +303,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_correction_click_no_prev_mask_pred_debug"
     },
     {
       "name": "video_correction_click_prev_mem_debug",
@@ -343,7 +351,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_correction_click_prev_mem_debug"
     },
     {
       "name": "video_correction_click_stateless_refinement_debug",
@@ -392,7 +401,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_correction_click_stateless_refinement_debug"
     },
     {
       "name": "video_correction_click_no_clear_mem_debug",
@@ -439,7 +449,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_correction_click_no_clear_mem_debug"
     },
     {
       "name": "video_correction_click_not_all_frames_cond_debug",
@@ -486,7 +497,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_correction_click_not_all_frames_cond_debug"
     },
     {
       "name": "video_start_from_first_ann_debug",
@@ -518,7 +530,8 @@
             "max_frame_num_to_track": 18
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_start_from_first_ann_debug"
     },
     {
       "name": "video_multi_object_debug",
@@ -555,7 +568,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_multi_object_debug"
     },
     {
       "name": "video_multi_object_clear_mem_debug",
@@ -609,7 +623,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_multi_object_clear_mem_debug"
     },
     {
       "name": "video_output_non_overlap_debug",
@@ -648,7 +663,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_output_non_overlap_debug"
     },
     {
       "name": "video_mem_non_overlap_debug",
@@ -687,7 +703,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_mem_non_overlap_debug"
     },
     {
       "name": "video_fill_hole_disabled_debug",
@@ -717,7 +734,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_fill_hole_disabled_debug"
     },
     {
       "name": "video_fill_hole_enabled_debug",
@@ -747,7 +765,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_fill_hole_enabled_debug"
     },
     {
       "name": "video_long_history_stride1_debug",
@@ -810,7 +829,8 @@
             "max_frame_num_to_track": 10
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_long_history_stride1_debug"
     },
     {
       "name": "video_long_history_obj_ptr_overflow_debug",
@@ -965,7 +985,8 @@
             "max_frame_num_to_track": 18
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_long_history_obj_ptr_overflow_debug"
     },
     {
       "name": "video_long_history_stride_gt1_debug",
@@ -1030,7 +1051,8 @@
             "max_frame_num_to_track": 10
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_long_history_stride_gt1_debug"
     },
     {
       "name": "video_long_history_keep_first_cond_debug",
@@ -1095,7 +1117,8 @@
             "max_frame_num_to_track": 10
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_long_history_keep_first_cond_debug"
     },
     {
       "name": "video_long_history_temporal_disambiguation_debug",
@@ -1158,7 +1181,8 @@
             "max_frame_num_to_track": 10
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_long_history_temporal_disambiguation_debug"
     },
     {
       "name": "video_long_history_trim_mem_debug",
@@ -1223,7 +1247,8 @@
             "max_frame_num_to_track": 10
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_long_history_trim_mem_debug"
     },
     {
       "name": "video_offload_output_cpu_debug",
@@ -1254,7 +1279,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_offload_output_cpu_debug"
     },
     {
       "name": "video_reverse_propagation_debug",
@@ -1283,7 +1309,8 @@
             "max_frame_num_to_track": 10
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_reverse_propagation_debug"
     },
     {
       "name": "video_multimask_disabled_tracking_debug",
@@ -1315,7 +1342,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_multimask_disabled_tracking_debug"
     },
     {
       "name": "video_multimask_disabled_sam_debug",
@@ -1347,7 +1375,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_multimask_disabled_sam_debug"
     },
     {
       "name": "video_postprocess_hidden_obj_debug",
@@ -1377,7 +1406,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_postprocess_hidden_obj_debug"
     },
     {
       "name": "video_postprocess_unconfirmed_box_debug",
@@ -1410,7 +1440,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_postprocess_unconfirmed_box_debug"
     },
     {
       "name": "video_forward_backbone_all_frames_debug",
@@ -1441,7 +1472,8 @@
             "max_frame_num_to_track": 30
           }
         ]
-      }
+      },
+      "artifact_dir": "reference_video_forward_backbone_all_frames_debug"
     }
   ]
 }

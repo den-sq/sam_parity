@@ -1,47 +1,47 @@
 # Strict Port Step 2–8 Bundle Coverage
 
 Current matrix source:
-- `candle-examples/examples/sam3/video_tracker_strict_port_matrix.json`
+- `docs/video_tracker_strict_port_matrix.json`
 
 Current materialized matrix-equivalent bundles on disk:
-- `video_box_debug_default` -> `candle-examples/examples/sam3/reference_video_box_debug`
-- `video_box_debug_temporal_disambiguation` -> `candle-examples/examples/sam3/reference_video_box_debug_temporal_disambiguation`
-- `video_postprocess_unconfirmed_box_debug` -> `candle-examples/examples/sam3/reference_video_postprocess_unconfirmed_box_debug`
-- `video_point_debug_single_click` -> `candle-examples/examples/sam3/reference_video_point_debug_single_click`
-- `video_point_debug_multi_click` -> `candle-examples/examples/sam3/reference_video_point_debug_multi_click`
-- `video_point_debug_all_points` -> `candle-examples/examples/sam3/reference_video_point_debug_all_points`
-- `video_mask_debug` -> `candle-examples/examples/sam3/reference_video_mask_debug`
-- `video_correction_click_debug` -> `candle-examples/examples/sam3/reference_video_correction_click_debug`
-- `video_correction_click_no_prev_mask_pred_debug` -> `candle-examples/examples/sam3/reference_video_correction_click_no_prev_mask_pred_debug`
-- `video_correction_click_prev_mem_debug` -> `candle-examples/examples/sam3/reference_video_correction_click_prev_mem_debug`
-- `video_correction_click_stateless_refinement_debug` -> `candle-examples/examples/sam3/reference_video_correction_click_stateless_refinement_debug`
-- `video_correction_click_no_clear_mem_debug` -> `candle-examples/examples/sam3/reference_video_correction_click_no_clear_mem_debug`
-- `video_correction_click_not_all_frames_cond_debug` -> `candle-examples/examples/sam3/reference_video_correction_click_not_all_frames_cond_debug`
-- `video_start_from_first_ann_debug` -> `candle-examples/examples/sam3/reference_video_start_from_first_ann_debug`
-- `video_multi_object_debug` -> `candle-examples/examples/sam3/reference_video_multi_object_debug`
-- `video_multi_object_clear_mem_debug` -> `candle-examples/examples/sam3/reference_video_multi_object_clear_mem_debug`
-- `video_output_non_overlap_debug` -> `candle-examples/examples/sam3/reference_video_output_non_overlap_debug`
-- `video_mem_non_overlap_debug` -> `candle-examples/examples/sam3/reference_video_mem_non_overlap_debug`
-- `video_long_history_stride1_debug` -> `candle-examples/examples/sam3/reference_video_long_history_stride1_debug`
-- `video_long_history_obj_ptr_overflow_debug` -> `candle-examples/examples/sam3/reference_video_long_history_obj_ptr_overflow_debug`
-- `video_long_history_stride_gt1_debug` -> `candle-examples/examples/sam3/reference_video_long_history_stride_gt1_debug`
-- `video_long_history_keep_first_cond_debug` -> `candle-examples/examples/sam3/reference_video_long_history_keep_first_cond_debug`
-- `video_long_history_temporal_disambiguation_debug` -> `candle-examples/examples/sam3/reference_video_long_history_temporal_disambiguation_debug`
-- `video_long_history_trim_mem_debug` -> `candle-examples/examples/sam3/reference_video_long_history_trim_mem_debug`
-- `video_fill_hole_disabled_debug` -> `candle-examples/examples/sam3/reference_video_fill_hole_disabled_debug`
-- `video_fill_hole_enabled_debug` -> `candle-examples/examples/sam3/reference_video_fill_hole_enabled_debug`
-- `video_offload_output_cpu_debug` -> `candle-examples/examples/sam3/reference_video_offload_output_cpu_debug`
-- `video_reverse_propagation_debug` -> `candle-examples/examples/sam3/reference_video_reverse_propagation_debug`
-- `video_multimask_disabled_tracking_debug` -> `candle-examples/examples/sam3/reference_video_multimask_disabled_tracking_debug`
-- `video_multimask_disabled_sam_debug` -> `candle-examples/examples/sam3/reference_video_multimask_disabled_sam_debug`
-- `video_postprocess_hidden_obj_debug` -> `candle-examples/examples/sam3/reference_video_postprocess_hidden_obj_debug`
+- `video_box_debug_default` -> `tests/reference-bundles/reference_video_box_debug`
+- `video_box_debug_temporal_disambiguation` -> `tests/reference-bundles/reference_video_box_debug_temporal_disambiguation`
+- `video_postprocess_unconfirmed_box_debug` -> `tests/reference-bundles/reference_video_postprocess_unconfirmed_box_debug`
+- `video_point_debug_single_click` -> `tests/reference-bundles/reference_video_point_debug_single_click`
+- `video_point_debug_multi_click` -> `tests/reference-bundles/reference_video_point_debug_multi_click`
+- `video_point_debug_all_points` -> `tests/reference-bundles/reference_video_point_debug_all_points`
+- `video_mask_debug` -> `tests/reference-bundles/reference_video_mask_debug`
+- `video_correction_click_debug` -> `tests/reference-bundles/reference_video_correction_click_debug`
+- `video_correction_click_no_prev_mask_pred_debug` -> `tests/reference-bundles/reference_video_correction_click_no_prev_mask_pred_debug`
+- `video_correction_click_prev_mem_debug` -> `tests/reference-bundles/reference_video_correction_click_prev_mem_debug`
+- `video_correction_click_stateless_refinement_debug` -> `tests/reference-bundles/reference_video_correction_click_stateless_refinement_debug`
+- `video_correction_click_no_clear_mem_debug` -> `tests/reference-bundles/reference_video_correction_click_no_clear_mem_debug`
+- `video_correction_click_not_all_frames_cond_debug` -> `tests/reference-bundles/reference_video_correction_click_not_all_frames_cond_debug`
+- `video_start_from_first_ann_debug` -> `tests/reference-bundles/reference_video_start_from_first_ann_debug`
+- `video_multi_object_debug` -> `tests/reference-bundles/reference_video_multi_object_debug`
+- `video_multi_object_clear_mem_debug` -> `tests/reference-bundles/reference_video_multi_object_clear_mem_debug`
+- `video_output_non_overlap_debug` -> `tests/reference-bundles/reference_video_output_non_overlap_debug`
+- `video_mem_non_overlap_debug` -> `tests/reference-bundles/reference_video_mem_non_overlap_debug`
+- `video_long_history_stride1_debug` -> `tests/reference-bundles/reference_video_long_history_stride1_debug`
+- `video_long_history_obj_ptr_overflow_debug` -> `tests/reference-bundles/reference_video_long_history_obj_ptr_overflow_debug`
+- `video_long_history_stride_gt1_debug` -> `tests/reference-bundles/reference_video_long_history_stride_gt1_debug`
+- `video_long_history_keep_first_cond_debug` -> `tests/reference-bundles/reference_video_long_history_keep_first_cond_debug`
+- `video_long_history_temporal_disambiguation_debug` -> `tests/reference-bundles/reference_video_long_history_temporal_disambiguation_debug`
+- `video_long_history_trim_mem_debug` -> `tests/reference-bundles/reference_video_long_history_trim_mem_debug`
+- `video_fill_hole_disabled_debug` -> `tests/reference-bundles/reference_video_fill_hole_disabled_debug`
+- `video_fill_hole_enabled_debug` -> `tests/reference-bundles/reference_video_fill_hole_enabled_debug`
+- `video_offload_output_cpu_debug` -> `tests/reference-bundles/reference_video_offload_output_cpu_debug`
+- `video_reverse_propagation_debug` -> `tests/reference-bundles/reference_video_reverse_propagation_debug`
+- `video_multimask_disabled_tracking_debug` -> `tests/reference-bundles/reference_video_multimask_disabled_tracking_debug`
+- `video_multimask_disabled_sam_debug` -> `tests/reference-bundles/reference_video_multimask_disabled_sam_debug`
+- `video_postprocess_hidden_obj_debug` -> `tests/reference-bundles/reference_video_postprocess_hidden_obj_debug`
 
 Interpretation of the `export_reference.py builds bundle?` column:
 - `Yes` means the current exporter supports the scenario action set and override surface needed to construct that matrix row.
 - It does **not** mean the bundle has already been materialized successfully on disk. Materialization status is reported separately in the `Sufficient bundle with export data exists?` column.
 
 Legacy non-matrix bundle not counted toward strict-port coverage:
-- `candle-examples/examples/sam3/reference_tracker_box_debug`
+- `tests/reference-bundles/reference_tracker_box_debug`
 
 Flash Attention note:
 - the confirmed `reference_video_box_debug` export was generated with Flash Attention disabled because the available GPU is pre-Ampere. This is acceptable for strict parity against the current upstream export path, but it does not validate a Flash-Attention-enabled upstream runtime.
