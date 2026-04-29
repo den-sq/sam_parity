@@ -882,7 +882,7 @@ def normalized_box_xyxy_to_mask(box_xyxy, width, height):
     mask = np.zeros((height, width), dtype="uint8")
     x0, x1 = sorted((x0, x1))
     y0, y1 = sorted((y0, y1))
-    mask[y0 : y1 + 1, x0 : x1 + 1] = 1
+    mask[y0: y1 + 1, x0: x1 + 1] = 1
     return mask
 
 
@@ -2557,31 +2557,6 @@ def execute_video_scenario_action_video_inference(
                 )
         return
 
-    if action_type == "remove_object":
-        frame_idx = int(action.get("frame_idx", 0))
-        response = predictor.handle_request(
-            {
-                "type": "remove_object",
-                "session_id": session_id,
-                "frame_index": frame_idx,
-                "obj_id": int(action["obj_id"]),
-            }
-        )
-        replace_frame_outputs(
-            frame_outputs,
-            int(response.get("frame_index", frame_idx)),
-            response.get(
-                "outputs",
-                {
-                    "out_obj_ids": [],
-                    "out_probs": [],
-                    "out_boxes_xywh": [],
-                    "out_binary_masks": [],
-                },
-            ),
-        )
-        return
-
     if action_type == "propagate":
         start_frame_index = action.get("start_frame_idx", None)
         model = getattr(predictor, "model", None)
@@ -2875,7 +2850,8 @@ def main():
             args.prompt is not None or args.box or args.box_label
         ):
             raise ValueError(
-                "`--video-scenario` drives video prompts internally; do not combine it with `--prompt`, `--box`, or `--box-label`"
+                "`--video-scenario` drives video prompts internally;"
+                " do not combine it with `--prompt`, `--box`, or `--box-label`"
             )
         if args.video_scenario is None and args.prompt is None and not args.box:
             raise ValueError("video export requires --prompt, --box, or both")
@@ -3591,9 +3567,9 @@ def main():
         tensors.update(
             {
                 "fusion.memory": to_cpu_contiguous(encoder_out["encoder_hidden_states"]),
-                "geometry.features": to_cpu_contiguous(prompt[text_outputs["language_features"].shape[0] :]),
+                "geometry.features": to_cpu_contiguous(prompt[text_outputs["language_features"].shape[0]:]),
                 "geometry.padding_mask": to_cpu_contiguous(
-                    prompt_mask[:, text_outputs["language_mask"].shape[1] :].to(torch.uint8)
+                    prompt_mask[:, text_outputs["language_mask"].shape[1]:].to(torch.uint8)
                 ),
                 "decoder.pred_logits": to_cpu_contiguous(out["pred_logits"]),
                 "decoder.pred_boxes_xyxy": to_cpu_contiguous(out["pred_boxes_xyxy"]),

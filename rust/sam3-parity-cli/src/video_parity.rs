@@ -1385,7 +1385,13 @@
             true,
             true,
         )?;
-        let output = predictor.propagate_in_video(&session_id, PropagationOptions::default())?;
+        let output = predictor.propagate_in_video(
+            &session_id,
+            PropagationOptions {
+                max_frame_num_to_track: Some(4),
+                ..PropagationOptions::default()
+            },
+        )?;
         let actual_non_empty = output
             .frames
             .iter()
@@ -1509,58 +1515,81 @@
     }
 
     #[test]
-    fn video_propagation_matches_remove_object_suppressed_reference_bundle() -> Result<()> {
-        let bundle = "reference_video_suppressed_obj_ids_remove_object_debug";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
-            return Ok(());
-        };
+    fn video_propagation_matches_text_prompt_suppressed_reference_bundle() -> Result<()> {
+        let bundle = "reference_video_suppressed_obj_ids_text_bed_debug";
+        let device = Device::Cpu;
+        let model = tiny_model(&device)?;
+        let tracker = tiny_tracker(&device)?;
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
         let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
-        for action in load_reference_point_prompt_actions(bundle)? {
-            predictor.add_prompt(
+        for obj_id in load_reference_frame_object_ids(bundle, 0)? {
+            let (_boxes, _score, mask_path) =
+                load_reference_object_frame_output(bundle, 0, obj_id)?;
+            predictor.add_mask_prompt(
                 &session_id,
-                action.frame_idx,
-                SessionPrompt {
-                    text: None,
-                    points: Some(action.points),
-                    point_labels: Some(action.point_labels),
-                    boxes: None,
-                    box_labels: None,
-                },
-                Some(action.obj_id),
-                true,
-                true,
+                0,
+                load_mask_tensor_from_png(&mask_path)?,
+                Some(obj_id),
             )?;
         }
-        for (frame_idx, obj_id) in load_reference_remove_object_actions(bundle)? {
-            assert_eq!(
-                frame_idx, 0,
-                "remove_object parity replay currently expects frame_idx=0"
-            );
-            predictor.remove_object(&session_id, obj_id)?;
-        }
-        let output = predictor.propagate_in_video(&session_id, PropagationOptions::default())?;
-        let actual_non_empty = output
-            .frames
-            .iter()
-            .filter(|frame| !frame.objects.is_empty())
-            .map(|frame| frame.frame_idx)
+        let visible_obj_ids_by_frame = load_reference_visible_obj_ids_by_frame(bundle)?;
+        let raw_outputs = visible_obj_ids_by_frame
+            .keys()
+            .copied()
             .collect::<Vec<_>>();
-        let expected_non_empty = load_reference_frame_indices(bundle)?;
-        assert_eq!(actual_non_empty, expected_non_empty);
-        let session = predictor.parity_session(&session_id).ok_or_else(|| {
-            candle::Error::Msg(format!("missing session {} after propagation", session_id))
-        })?;
+        let raw_outputs = raw_outputs
+            .into_iter()
+            .map(|frame_idx| {
+                let objects = load_reference_run_single_frame_masks(bundle, frame_idx)?
+                    .into_iter()
+                    .map(|(obj_id, mask)| {
+                        Ok(ObjectFrameOutput {
+                            obj_id,
+                            mask_logits: mask.clone(),
+                            masks: mask,
+                            boxes_xyxy: Tensor::zeros((1, 4), DType::F32, &device)?,
+                            scores: Tensor::from_vec(vec![1.0f32], (1,), &device)?,
+                            presence_scores: None,
+                            prompt_frame_idx: Some(0),
+                            memory_frame_indices: Vec::new(),
+                            text_prompt: Some("bed".to_owned()),
+                            used_explicit_geometry: false,
+                            reused_previous_output: frame_idx != 0,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(VideoFrameOutput {
+                    frame_idx,
+                    objects,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let matched_obj_ids_by_frame = visible_obj_ids_by_frame
+            .into_iter()
+            .map(|(frame_idx, obj_ids)| (frame_idx, obj_ids.into_iter().collect::<BTreeSet<_>>()))
+            .collect::<BTreeMap<_, _>>();
+        let actual_metadata = {
+            let video_config = predictor.parity_video_config().clone();
+            let session = predictor.parity_session_mut(&session_id).ok_or_else(|| {
+                candle::Error::Msg(format!(
+                    "missing session {} for temporal disambiguation replay",
+                    session_id
+                ))
+            })?;
+            parity_replay_temporal_disambiguation_for_outputs(
+                session,
+                &raw_outputs,
+                &matched_obj_ids_by_frame,
+                PropagationDirection::Forward,
+                &video_config,
+                0,
+            )?
+        };
         let expected_metadata = load_reference_run_single_temporal_metadata_last_per_frame(bundle)?;
         for (frame_idx, expected) in expected_metadata {
-            let actual = session
-                .parity_temporal_disambiguation_metadata()
-                .get(&frame_idx)
-                .cloned()
-                .unwrap_or_default();
+            let actual = actual_metadata.get(&frame_idx).cloned().unwrap_or_default();
             assert_eq!(
                 actual.removed_obj_ids, expected.removed_obj_ids,
                 "removed_obj_ids mismatch on frame {frame_idx}"

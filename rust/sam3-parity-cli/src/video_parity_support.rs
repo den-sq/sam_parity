@@ -441,6 +441,44 @@ mod tests {
             .collect())
     }
 
+    fn load_reference_visible_obj_ids_by_frame(
+        bundle: &str,
+    ) -> Result<BTreeMap<usize, Vec<u32>>> {
+        let bundle_dir = reference_bundle_dir(bundle);
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(bundle_dir.join("video_results.json"))?)
+                .map_err(|err| candle::Error::Msg(err.to_string()))?;
+        let frames = match &value {
+            serde_json::Value::Array(frames) => frames,
+            serde_json::Value::Object(_) => value["frames"].as_array().ok_or_else(|| {
+                candle::Error::Msg("reference video results missing frames array".to_owned())
+            })?,
+            _ => {
+                candle::bail!("reference video results must be an array or object with frames")
+            }
+        };
+        Ok(frames
+            .iter()
+            .filter_map(|frame| {
+                let frame_idx = frame["frame_idx"].as_u64()? as usize;
+                let objects = frame["objects"].as_array()?;
+                Some((
+                    frame_idx,
+                    objects
+                        .iter()
+                        .filter_map(|object| object["obj_id"].as_u64().map(|value| value as u32))
+                        .collect::<Vec<_>>(),
+                ))
+            })
+            .collect())
+    }
+
+    fn load_reference_frame_object_ids(bundle: &str, frame_idx: usize) -> Result<Vec<u32>> {
+        Ok(load_reference_visible_obj_ids_by_frame(bundle)?
+            .remove(&frame_idx)
+            .unwrap_or_default())
+    }
+
     fn load_reference_frame0_output(bundle: &str) -> Result<(Vec<f32>, f32, PathBuf)> {
         load_reference_frame_output(bundle, 0)
     }
@@ -514,6 +552,25 @@ mod tests {
 
     fn load_reference_point_prompt(bundle: &str) -> Result<(Vec<(f32, f32)>, Vec<u32>)> {
         load_reference_point_prompt_on_frame(bundle, 0)
+    }
+
+    fn load_reference_text_prompt(bundle: &str) -> Result<String> {
+        let bundle_dir = reference_bundle_dir(bundle);
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(bundle_dir.join("reference.json"))?)
+                .map_err(|err| candle::Error::Msg(err.to_string()))?;
+        value["scenario"]["actions"]
+            .as_array()
+            .and_then(|actions| {
+                actions
+                    .iter()
+                    .find(|action| action["type"].as_str() == Some("add_prompt"))
+            })
+            .and_then(|action| action["text"].as_str())
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                candle::Error::Msg("reference bundle missing text prompt action".to_owned())
+            })
     }
 
     fn load_reference_point_prompt_on_frame(
@@ -643,33 +700,23 @@ mod tests {
             .collect()
     }
 
-    fn load_reference_remove_object_actions(bundle: &str) -> Result<Vec<(usize, u32)>> {
-        let bundle_dir = reference_bundle_dir(bundle);
-        let value: serde_json::Value =
-            serde_json::from_slice(&fs::read(bundle_dir.join("reference.json"))?)
-                .map_err(|err| candle::Error::Msg(err.to_string()))?;
-        let actions = value["scenario"]["actions"].as_array().ok_or_else(|| {
-            candle::Error::Msg("reference bundle missing scenario actions".to_owned())
-        })?;
-        actions
-            .iter()
-            .filter(|action| action["type"].as_str() == Some("remove_object"))
-            .map(|action| {
-                let frame_idx = action["frame_idx"].as_u64().unwrap_or(0) as usize;
-                let obj_id = action["obj_id"].as_u64().ok_or_else(|| {
-                    candle::Error::Msg(
-                        "reference remove_object scenario action missing obj_id".to_owned(),
-                    )
-                })? as u32;
-                Ok((frame_idx, obj_id))
-            })
-            .collect()
-    }
-
     fn load_reference_internal_manifest(bundle: &str) -> Result<serde_json::Value> {
         let bundle_dir = reference_bundle_dir(bundle);
         serde_json::from_slice(&fs::read(bundle_dir.join("debug/internal_manifest.json"))?)
             .map_err(|err| candle::Error::Msg(err.to_string()))
+    }
+
+    fn load_reference_scenario_predictor_overrides(
+        bundle: &str,
+    ) -> Result<serde_json::Map<String, serde_json::Value>> {
+        let bundle_dir = reference_bundle_dir(bundle);
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(bundle_dir.join("reference.json"))?)
+                .map_err(|err| candle::Error::Msg(err.to_string()))?;
+        Ok(value["scenario"]["predictor_overrides"]
+            .as_object()
+            .cloned()
+            .unwrap_or_default())
     }
 
     fn apply_reference_predictor_runtime_overrides(
@@ -680,6 +727,7 @@ mod tests {
         let predictor_config = manifest["predictor_config"].as_object().ok_or_else(|| {
             candle::Error::Msg("reference manifest missing predictor_config".to_owned())
         })?;
+        let scenario_predictor_overrides = load_reference_scenario_predictor_overrides(bundle)?;
         if let Some(fill_hole_area) = predictor_config
             .get("fill_hole_area")
             .and_then(|value| value.as_u64())
@@ -699,6 +747,64 @@ mod tests {
         {
             predictor.parity_video_config_mut().non_overlap_masks_for_output =
                 non_overlap_masks_for_output;
+        }
+        if let Some(hotstart_delay) = predictor_config
+            .get("hotstart_delay")
+            .and_then(|value| value.as_u64())
+        {
+            predictor.parity_video_config_mut().hotstart_delay = hotstart_delay as usize;
+        }
+        if let Some(hotstart_unmatch_thresh) = predictor_config
+            .get("hotstart_unmatch_thresh")
+            .and_then(|value| value.as_u64())
+        {
+            predictor.parity_video_config_mut().hotstart_unmatch_thresh =
+                hotstart_unmatch_thresh as usize;
+        }
+        if let Some(threshold) = predictor_config
+            .get("suppress_overlapping_based_on_recent_occlusion_threshold")
+            .and_then(|value| value.as_f64())
+        {
+            predictor
+                .parity_video_config_mut()
+                .suppress_overlapping_based_on_recent_occlusion_threshold = threshold as f32;
+        }
+        if let Some(threshold) = scenario_predictor_overrides
+            .get("score_threshold_detection")
+            .and_then(|value| value.as_f64())
+        {
+            predictor.parity_video_config_mut().score_threshold_detection = threshold as f32;
+        }
+        if let Some(value) = scenario_predictor_overrides
+            .get("suppress_unmatched_only_within_hotstart")
+            .and_then(|value| value.as_bool())
+        {
+            predictor.parity_video_config_mut().suppress_unmatched_only_within_hotstart = value;
+        }
+        if let Some(value) = scenario_predictor_overrides
+            .get("init_trk_keep_alive")
+            .and_then(|value| value.as_i64())
+        {
+            predictor.parity_video_config_mut().init_trk_keep_alive = value as isize;
+        }
+        if let Some(value) = scenario_predictor_overrides
+            .get("max_trk_keep_alive")
+            .and_then(|value| value.as_i64())
+        {
+            predictor.parity_video_config_mut().max_trk_keep_alive = value as isize;
+        }
+        if let Some(value) = scenario_predictor_overrides
+            .get("min_trk_keep_alive")
+            .and_then(|value| value.as_i64())
+        {
+            predictor.parity_video_config_mut().min_trk_keep_alive = value as isize;
+        }
+        if let Some(value) = scenario_predictor_overrides
+            .get("decrease_trk_keep_alive_for_empty_masklets")
+            .and_then(|value| value.as_bool())
+        {
+            predictor.parity_video_config_mut().decrease_trk_keep_alive_for_empty_masklets =
+                value;
         }
         Ok(())
     }
@@ -724,6 +830,38 @@ mod tests {
                 ))
             })?
             .load(&Device::Cpu)
+    }
+
+    fn load_reference_internal_tensor_allow_bool(bundle: &str, key: &str) -> Result<Tensor> {
+        use candle::Shape;
+
+        let bundle_dir = reference_bundle_dir(bundle);
+        let path = bundle_dir.join("debug/internal_fixtures.safetensors");
+        let tensors =
+            unsafe { candle::safetensors::MmapedSafetensors::new(&path) }.map_err(|err| {
+                candle::Error::Msg(format!(
+                    "failed to mmap reference fixtures {}: {err}",
+                    path.display()
+                ))
+            })?;
+        let view = tensors.get(key).map_err(|err| {
+            candle::Error::Msg(format!(
+                "failed to read tensor `{key}` from reference fixtures {}: {err}",
+                path.display()
+            ))
+        })?;
+        if format!("{:?}", view.dtype()) == "BOOL" {
+            let shape = Shape::from_dims(view.shape());
+            let values = view
+                .data()
+                .iter()
+                .map(|value| if *value == 0 { 0.0f32 } else { 1.0f32 })
+                .collect::<Vec<_>>();
+            Tensor::from_vec(values, shape, &Device::Cpu)
+        } else {
+            use candle::safetensors::Load;
+            view.load(&Device::Cpu)
+        }
     }
 
     fn load_reference_internal_record(
@@ -933,6 +1071,32 @@ mod tests {
         Ok(metadata_by_frame)
     }
 
+    fn load_reference_run_single_frame_masks(
+        bundle: &str,
+        frame_idx: usize,
+    ) -> Result<Vec<(u32, Tensor)>> {
+        let record = load_reference_internal_record(bundle, "run_single_frame_inference", frame_idx)?;
+        let tensor_keys = record["tensor_keys"].as_object().ok_or_else(|| {
+            candle::Error::Msg(format!(
+                "reference run_single_frame_inference frame {} missing tensor_keys",
+                frame_idx
+            ))
+        })?;
+        let mut outputs = tensor_keys
+            .iter()
+            .filter_map(|(name, value)| {
+                name.strip_prefix("run_single_frame_inference_output.obj_id_to_mask.")
+                    .and_then(|suffix| suffix.parse::<u32>().ok())
+                    .and_then(|obj_id| value.as_str().map(|tensor_key| (obj_id, tensor_key)))
+            })
+            .map(|(obj_id, tensor_key)| {
+                Ok((obj_id, load_reference_internal_tensor_allow_bool(bundle, tensor_key)?))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        outputs.sort_by_key(|(obj_id, _)| *obj_id);
+        Ok(outputs)
+    }
+
     fn json_usize_vec(value: &serde_json::Value, key: &str) -> Result<Vec<usize>> {
         value[key]
             .as_array()
@@ -1025,6 +1189,19 @@ mod tests {
         } else {
             intersection as f32 / union as f32
         })
+    }
+
+    fn load_mask_tensor_from_png(path: &Path) -> Result<Tensor> {
+        let image = image::open(path)
+            .map_err(|err| candle::Error::Msg(err.to_string()))?
+            .to_luma8();
+        let width = image.width() as usize;
+        let height = image.height() as usize;
+        let data = image
+            .pixels()
+            .map(|pixel| if pixel[0] >= 128 { 1.0f32 } else { 0.0f32 })
+            .collect::<Vec<_>>();
+        Tensor::from_vec(data, (height, width), &Device::Cpu)
     }
 
     fn binary_mask_iou_tensor(actual: &Tensor, expected: &Tensor) -> Result<f32> {
