@@ -30,6 +30,21 @@ Python package:
 python -m pip install -e python
 ```
 
+## Checkpoint Setup
+
+Source the helper below once per shell before running the checkpoint-backed
+examples. It prompts for your Hugging Face username, Hugging Face access token,
+and a download directory that defaults to `./chkpts`.
+
+```bash
+source examples/sam3/setup_sam3_env.sh
+```
+
+The helper downloads `sam3.pt` and `tokenizer.json` from the gated
+`facebook/sam3` repo, exports `SAM3_CHECKPOINT_DIR`, `SAM3_CHECKPOINT`,
+`SAM3_TOKENIZER`, `SAM3_TEST_CHECKPOINT_DIR`, and `SAM3_TEST_CHECKPOINT`, and
+writes a reusable `sam3-paths.env` file next to the downloads.
+
 ## Example Runs
 
 Lightweight checks that do not require generated video bundles:
@@ -60,7 +75,6 @@ Run a bundle-backed Rust parity test against generated artifacts in
 `tests/reference-bundles`:
 
 ```bash
-SAM3_TEST_CHECKPOINT_DIR=/path/to/hf_sam3 \
 cargo test -p sam3-parity-cli --features full-parity \
   video_process_frame_matches_visual_box_reference_bundle_frame0 -- --nocapture
 ```
@@ -68,7 +82,6 @@ cargo test -p sam3-parity-cli --features full-parity \
 Run the Python full-parity suite against an installed upstream `sam3` package:
 
 ```bash
-SAM3_CHECKPOINT=/path/to/hf_sam3/sam3.pt \
 python -m pytest -m full_parity python/python_debug/sam3_debug/tests -q
 ```
 
@@ -87,6 +100,8 @@ Notes:
   `SAM3_TEST_CHECKPOINT` or `SAM3_TEST_CHECKPOINT_DIR`.
 - Python full-parity tests expect an installed upstream `sam3` package plus
   `SAM3_CHECKPOINT`.
+- `source examples/sam3/setup_sam3_env.sh` is the quickest way to populate the
+  checkpoint and tokenizer environment variables used throughout this repo.
 - Bundle-backed tests read from `tests/reference-bundles` by default and skip or
   fail meaningfully when the required generated artifacts are absent.
 
@@ -121,8 +136,11 @@ Portable path defaults:
 
 - `SAM3_PARITY_BUNDLE_ROOT`: generated bundle root, default `tests/reference-bundles`
 - `SAM3_PARITY_DATA_ROOT`: reusable fixture root, default `tests/data`
+- `SAM3_CHECKPOINT_DIR`: local directory containing `sam3.pt` and `tokenizer.json`
 - `SAM3_CHECKPOINT`: local `sam3.pt` or checkpoint directory
 - `SAM3_TOKENIZER`: local `tokenizer.json`
+- `SAM3_TEST_CHECKPOINT_DIR`: checkpoint directory used by Rust full-parity tests
+- `SAM3_TEST_CHECKPOINT`: local `sam3.pt` used by Rust full-parity tests
 - `SAM3_UPSTREAM_URL`: optional upstream or fork URL recorded in generated metadata
 - `SAM3_UPSTREAM_REF`: optional upstream commit, tag, or branch recorded in generated metadata
 
