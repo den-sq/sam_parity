@@ -1,5 +1,8 @@
 # SAM3 Parity Checklist
 
+Actionable follow-up is tracked in GitHub issues. This document is a parity-run
+record only.
+
 Last updated: 2026-04-10
 
 ## Current Reference Bundle
@@ -83,7 +86,7 @@ Last updated: 2026-04-10
 - CUDA was worse numerically in the earlier pre-fix run, but not qualitatively different:
   - it failed earlier in the trunk
   - it showed the same general block-MLP drift pattern
-  - it should be re-run only after the CPU trunk path is tighter
+  - it showed the same overall drift family as the CPU run
 - The new block-level debug shows the block-10 attention path is close:
   - CPU: `vision.block_debug.10.attn_output` passes (`max_abs_diff=0.000039816`)
   - CUDA: `vision.block_debug.10.attn_output` also passes (`max_abs_diff=0.000085831`)
@@ -98,7 +101,7 @@ After the ROIAlign fix, the geometry conclusion changed materially:
 
 - `geometry.features` is no longer a live parity problem on CPU.
 - The fusion mismatch is now small enough to treat as mostly downstream of the early trunk drift.
-- After the segmentation fixture fixes, the next meaningful unresolved issue is the early vision trunk drift, not segmentation-head math.
+- After the segmentation fixture fixes, the dominant remaining mismatch in this run set is the early vision trunk drift rather than segmentation-head math.
 
 ## Earlier Trunk Localization
 
@@ -251,73 +254,3 @@ Conclusion from targeted segmentation tests:
   - `cross_attn_norm` `LayerNorm` epsilon
   - `mask_predictor.mask_embed` depth
 - After those fixes, the full-model `segmentation.mask_logits` error collapsed from `110.912315` to `0.031055`, which is consistent with the remaining upstream trunk/fusion drift rather than a live segmentation semantic bug.
-
-## Suspected Divergence Points
-
-1. Geometry feature construction
-   - Resolved on CPU.
-   - Targeted fixture tests and the full CPU parity rerun both now show geometry parity is within tolerance.
-   - The ROIAlign refactor now has a matching Python-side debug wrapper in `python_debug/export_geometry_unit_fixture.py`, which exports feature-space box coordinates and sampling internals for future investigation if needed.
-
-2. Early trunk drift before block 10
-   - Still the first live full-model mismatch.
-   - Current evidence:
-     - CPU: first fail at `vision.block.8`
-     - CUDA: first fail at `vision.block.7`
-   - Block-8/9 and block-10 debug both suggest attention is close and MLP/residual accumulation is the more suspicious subpath.
-
-3. Segmentation path
-   - Resolved as a primary semantic issue.
-   - Current evidence from the post-segmentation CPU run:
-     - standalone segmentation fixture passes
-     - `segmentation.mask_logits` is now small (`0.031055`)
-   - Remaining segmentation residuals should be treated as downstream of trunk / fusion drift unless new fixture failures appear.
-
-4. FPN stages 1 and 2
-   - Likely downstream of the trunk drift, not the root cause.
-   - Current diffs:
-     - CPU: `vision.backbone_fpn.1=0.001149893`, `vision.backbone_fpn.2=0.000814557`
-     - CUDA: `vision.backbone_fpn.1=0.002969980`, `vision.backbone_fpn.2=0.002114773`
-
-5. Fusion / segmentation
-   - Fusion remains a small cascading failure.
-   - Segmentation is no longer a dominant issue after the fixture-driven fixes.
-
-6. CUDA-specific numeric amplification
-   - Real, but secondary.
-   - It should be revisited only after CPU parity is materially tighter.
-
-## Fix Order
-
-1. Debug the first real trunk split, not block 10.
-   - Done for CPU with `--debug-block 8 --debug-block 9`.
-   - Current conclusion:
-     - block 8 only crosses threshold at the final residual-summed output
-     - block 9 MLP is the first internal branch that clearly fails
-   - Next:
-     - inspect the exact MLP path implementation against upstream for blocks 8-10
-     - verify residual-add ordering and any dtype / accumulation differences in the ViT block
-
-2. Geometry-stage internal parity.
-   - Done.
-   - The tiny standalone fixture now passes across helper, feature-composition, and mini-encoder layers.
-   - The fixed ROIAlign issues were:
-     - missing normalized-to-feature-space box scaling
-     - swapped pooled spatial dimensions during patch assembly
-
-3. Segmentation-stage internal parity.
-   - Done.
-   - The standalone segmentation fixture now passes across prompt attention, pixel decoder, mask predictor, and final outputs.
-
-4. Re-run CPU parity after each fix.
-   - CPU remains the cleaner signal for semantic parity.
-   - Only use CUDA as a confirmation pass until the CPU trunk and geometry mismatches are much smaller.
-
-5. Revisit CUDA once CPU is tighter.
-   - If CPU is near-pass but CUDA still fails early, then investigate CUDA kernel math / accumulation / tolerance separately.
-
-## Working Hypothesis
-
-- Geometry, decoder, and segmentation are no longer the primary unresolved parity bugs on CPU.
-- The earliest live mismatch is still the vision trunk at block 8, with evidence pointing toward residual / MLP accumulation rather than attention.
-- The next large-value target is the vision trunk / FPN path, because the standalone downstream heads now match and the full-model residuals are consistent with upstream trunk drift.

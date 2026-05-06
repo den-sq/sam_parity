@@ -1,5 +1,8 @@
 # Strict Port Step 2–8 Bundle Coverage
 
+Actionable follow-up is tracked in GitHub issues. This document is a coverage
+snapshot only.
+
 Current matrix source:
 - `docs/video_tracker_strict_port_matrix.json`
 
@@ -158,35 +161,3 @@ BF16 precision note:
 | hole-filling enabled | `video_fill_hole_enabled_debug` | Yes: `reference_video_fill_hole_enabled_debug` | Yes | Materialized and now consumed by a reference-backed Candle test |
 | hidden / suppressed / unconfirmed object postprocess path | `video_postprocess_hidden_obj_debug`, `video_box_debug_temporal_disambiguation`, `video_postprocess_unconfirmed_box_debug`, `video_suppressed_obj_ids_text_bed_debug` | Yes: `reference_video_postprocess_hidden_obj_debug` certifies the final empty-output path, `reference_video_box_debug_temporal_disambiguation` certifies the delayed-yield / unmatched-hotstart visible-output path, `reference_video_postprocess_unconfirmed_box_debug` certifies non-empty `unconfirmed_obj_ids` followed by `removed_obj_ids` on the producer side, and `reference_video_suppressed_obj_ids_text_bed_debug` certifies non-empty `suppressed_obj_ids` from duplicate/occlusion suppression | Yes | Candle now has reference-backed coverage for the consumer path, delayed-yield hotstart, the confirmation/unmatched-removal producer slice in `propagate_one_direction`, and the duplicate/occlusion suppression producer path via the text-prompt replay parity test |
 | empty / missing-object output path | `video_postprocess_hidden_obj_debug` | Yes: `reference_video_postprocess_hidden_obj_debug` | Yes | The official row now uses a negative-point prompt and produces zero visible objects on every frame, so Candle can certify the empty final-output branch against a real upstream bundle |
-
-## Missing Required Bundles
-
-All required matrix rows are now materialized on disk except the optional
-`video_forward_backbone_all_frames_debug` row, which is only needed if that upstream
-path is reachable.
-
-## Missing Export Fields
-
-No remaining known exporter-schema gaps are open for the Step 2–8 function map after the current `export_reference.py` updates.
-
-The exporter now records the previously missing orchestration / postprocess / SAM-head fields:
-
-- `get_visual_prompt`
-- `run_single_frame_inference`
-- `postprocess_output`
-- `det_track_one_frame`
-- `sam_prompt_encoder`
-- `sam_mask_decoder`
-- `forward_sam_heads`
-- `use_mask_as_output`
-- predictor config fields for:
-  - `hotstart_delay`
-  - `hotstart_unmatch_thresh`
-  - `hotstart_dup_thresh`
-  - `masklet_confirmation_enable`
-  - `masklet_confirmation_consecutive_det_thresh`
-
-What remains missing now is not exporter schema support or bundle materialization.
-The currently exported Step 2–8 function map is fully covered by required bundles,
-with `suppressed_obj_ids` now certified by
-`reference_video_suppressed_obj_ids_text_bed_debug`.

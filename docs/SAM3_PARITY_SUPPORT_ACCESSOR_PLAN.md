@@ -354,17 +354,3 @@ cargo test -p sam3-parity-cli --features full-parity --no-run
 ```
 
 and then proceed to fixture-backed execution as artifacts are available.
-
-## Follow-On Work After Phase 1
-
-Once Phase 1 accessors exist, the next steps in `sam_parity` are straightforward:
-
-- replace private field/method usage in the parked harness with parity-support
-  calls
-- compile the harness live under `full-parity`
-- keep any remaining failures focused on real behavioral parity, not visibility
-  gaps
-
-If later fixture work needs finer-grained video internals, we can add a Phase 2
-plan. But Phase 1 should stop at the minimum needed to get the extracted
-tracker/video parity sources alive again.
