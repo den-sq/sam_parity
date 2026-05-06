@@ -35,6 +35,7 @@ Current materialized matrix-equivalent bundles on disk:
 - `video_multimask_disabled_tracking_debug` -> `tests/reference-bundles/reference_video_multimask_disabled_tracking_debug`
 - `video_multimask_disabled_sam_debug` -> `tests/reference-bundles/reference_video_multimask_disabled_sam_debug`
 - `video_postprocess_hidden_obj_debug` -> `tests/reference-bundles/reference_video_postprocess_hidden_obj_debug`
+- `video_suppressed_obj_ids_text_bed_debug` -> `tests/reference-bundles/reference_video_suppressed_obj_ids_text_bed_debug`
 
 Interpretation of the `export_reference.py builds bundle?` column:
 - `Yes` means the current exporter supports the scenario action set and override surface needed to construct that matrix row.
@@ -155,22 +156,14 @@ BF16 precision note:
 | output non-overlap path | `video_output_non_overlap_debug` | Yes: `reference_video_output_non_overlap_debug` | Yes | Materialized and now consumed by a reference-backed Candle test |
 | hole-filling disabled | `video_fill_hole_disabled_debug` | Yes: `reference_video_fill_hole_disabled_debug` | Yes | Materialized and now consumed by a reference-backed Candle test |
 | hole-filling enabled | `video_fill_hole_enabled_debug` | Yes: `reference_video_fill_hole_enabled_debug` | Yes | Materialized and now consumed by a reference-backed Candle test |
-| hidden / suppressed / unconfirmed object postprocess path | `video_postprocess_hidden_obj_debug`, `video_box_debug_temporal_disambiguation`, `video_postprocess_unconfirmed_box_debug` | Yes: `reference_video_postprocess_hidden_obj_debug` certifies the final empty-output path, `reference_video_box_debug_temporal_disambiguation` certifies the delayed-yield / unmatched-hotstart visible-output path, and `reference_video_postprocess_unconfirmed_box_debug` certifies non-empty `unconfirmed_obj_ids` followed by `removed_obj_ids` on the producer side | Yes | Candle now has reference-backed coverage for the consumer path, delayed-yield hotstart, and the confirmation/unmatched-removal producer slice in `propagate_one_direction`; the remaining uncaptured surface is non-empty `suppressed_obj_ids` / duplicate suppression |
+| hidden / suppressed / unconfirmed object postprocess path | `video_postprocess_hidden_obj_debug`, `video_box_debug_temporal_disambiguation`, `video_postprocess_unconfirmed_box_debug`, `video_suppressed_obj_ids_text_bed_debug` | Yes: `reference_video_postprocess_hidden_obj_debug` certifies the final empty-output path, `reference_video_box_debug_temporal_disambiguation` certifies the delayed-yield / unmatched-hotstart visible-output path, `reference_video_postprocess_unconfirmed_box_debug` certifies non-empty `unconfirmed_obj_ids` followed by `removed_obj_ids` on the producer side, and `reference_video_suppressed_obj_ids_text_bed_debug` certifies non-empty `suppressed_obj_ids` from duplicate/occlusion suppression | Yes | Candle now has reference-backed coverage for the consumer path, delayed-yield hotstart, the confirmation/unmatched-removal producer slice in `propagate_one_direction`, and the duplicate/occlusion suppression producer path via the text-prompt replay parity test |
 | empty / missing-object output path | `video_postprocess_hidden_obj_debug` | Yes: `reference_video_postprocess_hidden_obj_debug` | Yes | The official row now uses a negative-point prompt and produces zero visible objects on every frame, so Candle can certify the empty final-output branch against a real upstream bundle |
 
 ## Missing Required Bundles
 
-All required matrix rows are now materialized on disk.
-
-The remaining coverage caveat is qualitative rather than materialization-based:
-
-- `video_postprocess_hidden_obj_debug` now certifies the empty final-output branch
-- `video_box_debug_temporal_disambiguation` now certifies the delayed-yield /
-  unmatched-removal hotstart row on the visible output surface
-- `video_postprocess_unconfirmed_box_debug` now certifies non-empty
-  `unconfirmed_obj_ids` and subsequent `removed_obj_ids` on the producer side
-- the remaining missing runtime surface for a full end-to-end video prediction run is
-  now narrower: a row with non-empty `suppressed_obj_ids` / duplicate suppression
+All required matrix rows are now materialized on disk except the optional
+`video_forward_backbone_all_frames_debug` row, which is only needed if that upstream
+path is reachable.
 
 ## Missing Export Fields
 
@@ -194,14 +187,6 @@ The exporter now records the previously missing orchestration / postprocess / SA
   - `masklet_confirmation_consecutive_det_thresh`
 
 What remains missing now is not exporter schema support or bundle materialization.
-
-The remaining open item is a scenario-quality issue:
-
-- `video_postprocess_hidden_obj_debug` is materialized and certifies the empty
-  final-output branch.
-- `video_postprocess_unconfirmed_box_debug` is materialized and certifies the
-  temporal-disambiguation / hotstart producer path for `unconfirmed_obj_ids` and
-  `removed_obj_ids`.
-- the corresponding Candle consumer path is implemented and reference-backed; the
-  remaining open item is an upstream-equivalent producer row with non-empty
-  `suppressed_obj_ids` from duplicate/occlusion suppression.
+The currently exported Step 2–8 function map is fully covered by required bundles,
+with `suppressed_obj_ids` now certified by
+`reference_video_suppressed_obj_ids_text_bed_debug`.

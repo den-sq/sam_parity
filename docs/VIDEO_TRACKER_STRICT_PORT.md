@@ -37,7 +37,7 @@ video tracking builders in `model_builder.py`.
 - `Step 7 / predictor / orchestration`
   - complete, including CUDA certification of the remaining reference-backed rows
 - `Step 8 / final output / postprocess`
-  - materially complete for the currently-exported upstream surface
+  - complete for the currently-exported upstream surface
   - implemented and reference-backed for:
     - output non-overlap
     - fill-hole disabled
@@ -48,6 +48,8 @@ video tracking builders in `model_builder.py`.
       `reference_video_box_debug_temporal_disambiguation` row
     - confirmation / hotstart producer metadata via the
       `reference_video_postprocess_unconfirmed_box_debug` row
+    - duplicate/occlusion suppression producer metadata via the
+      `reference_video_suppressed_obj_ids_text_bed_debug` row
   - implemented locally for:
     - metadata-driven hide inputs (`removed_obj_ids`, `suppressed_obj_ids`,
       `unconfirmed_obj_ids`) on the postprocess consumer side
@@ -56,10 +58,6 @@ video tracking builders in `model_builder.py`.
   - corrected temporal-disambiguation certification bundles now show that the
     visible missing behavior was the delayed-yield / unmatched-removal producer
     path, not exporter visibility alone
-  - the remaining uncaptured Step 8 surface is narrower:
-    - upstream rows with non-empty `suppressed_obj_ids`
-    - duplicate/occlusion-driven association suppression rather than the
-      confirmation/unmatched-removal row
 
 This distinction is intentional: Step 1 is the repo-side implementation of the export
 surface and required matrix. Stage 0 is the operational requirement that the bundles be
@@ -458,28 +456,34 @@ considered fully covered.
    - drives non-empty `unconfirmed_obj_ids` followed by `removed_obj_ids`
    - covers the confirmation/unmatched-removal producer path
 
+28. `video_suppressed_obj_ids_text_bed_debug`
+   - text prompt on a multi-object bed scene
+   - drives non-empty `suppressed_obj_ids`
+   - covers the duplicate/occlusion suppression producer path
+
 ### Multimask bundles
 
-28. `video_multimask_disabled_tracking_debug`
+29. `video_multimask_disabled_tracking_debug`
    - `multimask_output_for_tracking=False`
 
-29. `video_multimask_disabled_sam_debug`
+30. `video_multimask_disabled_sam_debug`
    - `multimask_output_in_sam=False`
 
 ### Storage/offload bundles
 
-30. `video_offload_output_cpu_debug`
+31. `video_offload_output_cpu_debug`
    - `offload_output_to_cpu_for_eval=True`
 
-31. `video_forward_backbone_all_frames_debug`
+32. `video_forward_backbone_all_frames_debug`
    - only required if the non-per-frame backbone-forward path is reachable in the
      SAM3 video predictor flow being ported
 
 ## Information Still Needed
 
-The plan is now structurally complete, but it is not fully executable yet. Additional
-upstream information is still required before several implementation stages can be
-described as exact, fixture-backed ports rather than source-derived intentions.
+The strict-port plan is now executable for the currently exported SAM3 surface. All
+required matrix rows are materialized on disk except the optional
+`video_forward_backbone_all_frames_debug` row, which remains conditional on that
+upstream path being reachable.
 
 ### Already available
 
@@ -489,9 +493,11 @@ The following information is available today:
   - exporter infrastructure in `export_reference.py`
   - source-controlled export matrix in `video_tracker_strict_port_matrix.json`
   - reproducible generator in `generate_video_tracker_strict_port_matrix.py`
-- materialized internal upstream bundles for:
+- materialized internal upstream bundles for the full required matrix, including:
   - `reference_video_box_debug`
   - `reference_video_box_debug_temporal_disambiguation`
+  - `reference_video_postprocess_unconfirmed_box_debug`
+  - `reference_video_suppressed_obj_ids_text_bed_debug`
 - source-level definitions for the full SAM3 tracker/predictor codepath from:
   - `model_builder.py`
   - `sam3_tracker_base.py`
@@ -499,35 +505,20 @@ The following information is available today:
   - `sam3_video_base.py`
   - `sam3_video_inference.py`
 
-This is enough to define the shape of the plan and to complete fixture-backed validation
-for the builder/config branches already exported. It is not enough to fully specify or
-validate the entire strict port until the rest of the matrix has been materialized.
+This is enough to fully specify and validate the strict port for the required matrix.
 
 ### Still required to fully describe and execute the plan
 
-The following upstream artifacts are still required unless already generated from the
-canonical matrix:
-
-- all prompt-mode bundles other than the two existing box bundles
-- all correction/predictor-wrapper bundles
-- all multi-object/overlap bundles
-- all long-history bundles
-- all postprocess bundles
-- all multimask bundles
-- all storage/offload bundles
+No additional upstream artifacts are currently required for the mandatory Step 2–8
+surface. The only remaining conditional artifact is
+`video_forward_backbone_all_frames_debug`, which is required only if the
+non-per-frame backbone-forward path is reachable in the upstream predictor flow.
 
 ### Additional internal fields that may still need export support
 
-If the existing internal fixture format is insufficient for any function-level parity
-test, the upstream exporter must be extended before the corresponding Rust implementation
-proceeds. Likely candidates include:
-
-- raw SAM prompt-encoder sparse embeddings
-- raw SAM prompt-encoder dense embeddings
-- raw multimask candidates before best-mask selection
-- raw IoU head outputs before dynamic multimask fallback logic
-- full decoder token outputs used for object-pointer selection
-- explicit postprocess decision metadata when non-overlap or hole-filling branches fire
+No additional internal export fields are currently known to be missing for the required
+Step 2–8 function map. If a future reachable branch needs extra tensors, extend the
+exporter before claiming parity for that branch.
 
 ### Planning rule for missing information
 
