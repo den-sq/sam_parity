@@ -79,6 +79,18 @@ cargo test -p sam3-parity-cli --features full-parity \
   video_process_frame_matches_visual_box_reference_bundle_frame0 -- --nocapture
 ```
 
+Run the preserved external tracker/video harness against current fixtures and
+bundles. These commands should execute end-to-end; any failure at this point is
+expected to be a behavioral parity gap rather than harness activation drift:
+
+```bash
+cargo test -p sam3-parity-cli --features full-parity \
+  tracker_track_frame_matches_single_click_point_fixture_values -- --nocapture
+
+cargo test -p sam3-parity-cli --features full-parity \
+  video_propagation_matches_text_prompt_suppressed_reference_bundle -- --nocapture
+```
+
 Run the Python full-parity suite against an installed upstream `sam3` package:
 
 ```bash
