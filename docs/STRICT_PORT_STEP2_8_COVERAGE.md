@@ -80,13 +80,13 @@ BF16 precision note:
 | `_get_visual_prompt` initial visual box branch | `video_box_debug_default` | Yes: `reference_video_box_debug` | Yes | `get_visual_prompt` stage present after confirmation rerun |
 | non-visual prompt path | `video_point_debug_single_click`, `video_mask_debug` | Yes | Yes | Point and direct-mask prompt bundles are both materialized |
 | `_tracker_add_new_objects` detector-to-tracker seed handoff | `video_box_debug_default` | Yes: `reference_video_box_debug` | Yes | `tracker_add_new_objects_input` and `_post_preflight` stages present |
-| `_use_mask_as_output` path | `video_box_debug_default`, `video_mask_debug` | Yes for default box bundle | Yes | `use_mask_as_output` is present in `reference_video_box_debug`; dedicated mask bundle still missing |
+| `_use_mask_as_output` path | `video_box_debug_default`, `video_mask_debug` | Yes: `reference_video_box_debug`, `reference_video_mask_debug` | Yes | The dedicated mask bundle is materialized and exports `use_mask_as_output`, but Candle still misses the direct-mask `obj_ptr` parity check in `tracker_use_mask_as_output_matches_direct_mask_fixture_values` / `tracker_track_frame_matches_mask_prompt_fixture_values` |
 
 ## Step 4: SAM-Head Execution
 
 | Requirement | Exact bundle(s) | Sufficient bundle with export data exists? | `export_reference.py` builds bundle? | Notes |
 | --- | --- | --- | --- | --- |
-| `get_tpos_enc` / object-pointer temporal encoding inputs | `video_box_debug_default`, `video_long_history_stride1_debug` | Yes for default short-history path only | Yes | Current default bundle has pointer temporal encodings in memory-selection debug |
+| `get_tpos_enc` / object-pointer temporal encoding inputs | `video_box_debug_default`, `video_long_history_stride1_debug`, `video_long_history_obj_ptr_overflow_debug` | Yes | Yes | The default, stride-1 long-history, and overflow bundles all export `selected_object_pointer_*` metadata and temporal encodings; the stride-1 and overflow parity checks both pass |
 | `use_multimask` enabled path | `video_point_debug_single_click` | Yes: `reference_video_point_debug_single_click` | Yes | Materialized tracker-engine point bundle |
 | `use_multimask` disabled by point-count gating | `video_point_debug_multi_click` | Yes: `reference_video_point_debug_multi_click` | Yes | Materialized multi-click tracker-engine bundle |
 | `_forward_sam_heads` standard path | `video_box_debug_default` | Yes: `reference_video_box_debug` | Yes | `forward_sam_heads` stage present |
@@ -102,7 +102,7 @@ BF16 precision note:
 | Requirement | Exact bundle(s) | Sufficient bundle with export data exists? | `export_reference.py` builds bundle? | Notes |
 | --- | --- | --- | --- | --- |
 | `prepare_memory_conditioned_features` default short-history path | `video_box_debug_default` | Yes: `reference_video_box_debug` | Yes | Stage present |
-| object-pointer temporal encoding | `video_box_debug_default`, `video_long_history_stride1_debug` | Yes for short-history path only | Yes | Long-history overflow branch still missing |
+| object-pointer temporal encoding | `video_box_debug_default`, `video_long_history_stride1_debug`, `video_long_history_obj_ptr_overflow_debug` | Yes | Yes | Long-history temporal offsets and encoder-cap overflow/truncation are both reference-backed and currently green in Candle parity tests |
 | conditioning / memory frame selection default path | `video_box_debug_default` | Yes: `reference_video_box_debug` | Yes | Selected frame indices and sources exported |
 | `use_memory_selection=False` | `video_box_debug_default` | Yes: `reference_video_box_debug` | Yes | Confirmed in tracker config and selection metadata |
 | `use_memory_selection=True` default short-history path | `video_box_debug_temporal_disambiguation` | Yes: `reference_video_box_debug_temporal_disambiguation` | Yes | Temporal-disambiguation bundle exists, but does not stress long-history selection |
