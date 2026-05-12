@@ -28,6 +28,12 @@ accelerate = [
     "candle-nn/accelerate",
     "candle-transformers/accelerate",
 ]
+cuda = [
+    "candle/cuda",
+    "candle-examples/cuda",
+    "candle-nn/cuda",
+    "candle-transformers/cuda",
+]
 mkl = [
     "dep:intel-mkl-src",
     "candle/mkl",

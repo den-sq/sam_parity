@@ -91,6 +91,14 @@ cargo test -p sam3-parity-cli --features full-parity \
   video_propagation_matches_text_prompt_suppressed_reference_bundle -- --nocapture
 ```
 
+Run the suppression replay row on the supported serial CUDA certification path:
+
+```bash
+cargo test -p sam3-parity-cli --features full-parity,cuda \
+  video_propagation_matches_text_prompt_suppressed_reference_bundle_cuda \
+  -- --ignored --nocapture --test-threads=1
+```
+
 Run the Python full-parity suite against an installed upstream `sam3` package:
 
 ```bash

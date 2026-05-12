@@ -1516,12 +1516,26 @@
 
     #[test]
     fn video_propagation_matches_text_prompt_suppressed_reference_bundle() -> Result<()> {
-        let bundle = "reference_video_suppressed_obj_ids_text_bed_debug";
         let device = Device::Cpu;
-        let model = tiny_model(&device)?;
-        let tracker = tiny_tracker(&device)?;
+        assert_video_propagation_matches_text_prompt_suppressed_reference_bundle(&device)
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "serial CUDA certification for the suppression replay row"]
+    fn video_propagation_matches_text_prompt_suppressed_reference_bundle_cuda() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        assert_video_propagation_matches_text_prompt_suppressed_reference_bundle(&device)
+    }
+
+    fn assert_video_propagation_matches_text_prompt_suppressed_reference_bundle(
+        device: &Device,
+    ) -> Result<()> {
+        let bundle = "reference_video_suppressed_obj_ids_text_bed_debug";
+        let model = tiny_model(device)?;
+        let tracker = tiny_tracker(device)?;
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
-        let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
+        let mut predictor = Sam3VideoPredictor::new(&model, &tracker, device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
         let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
         for obj_id in load_reference_frame_object_ids(bundle, 0)? {
@@ -1530,7 +1544,7 @@
             predictor.add_mask_prompt(
                 &session_id,
                 0,
-                load_mask_tensor_from_png(&mask_path)?,
+                load_mask_tensor_from_png(&mask_path)?.to_device(device)?,
                 Some(obj_id),
             )?;
         }
@@ -1545,12 +1559,13 @@
                 let objects = load_reference_run_single_frame_masks(bundle, frame_idx)?
                     .into_iter()
                     .map(|(obj_id, mask)| {
+                        let mask = mask.to_device(device)?;
                         Ok(ObjectFrameOutput {
                             obj_id,
                             mask_logits: mask.clone(),
                             masks: mask,
-                            boxes_xyxy: Tensor::zeros((1, 4), DType::F32, &device)?,
-                            scores: Tensor::from_vec(vec![1.0f32], (1,), &device)?,
+                            boxes_xyxy: Tensor::zeros((1, 4), DType::F32, device)?,
+                            scores: Tensor::from_vec(vec![1.0f32], (1,), device)?,
                             presence_scores: None,
                             prompt_frame_idx: Some(0),
                             memory_frame_indices: Vec::new(),
