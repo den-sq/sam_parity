@@ -4,7 +4,7 @@ mod tests {
     use std::{
         collections::{BTreeMap, HashMap},
         fs,
-        path::PathBuf,
+        path::{Path, PathBuf},
     };
 
     use candle_transformers::models::sam3::{Sam3CheckpointSource, VisualBackboneOutput};
@@ -308,6 +308,27 @@ mod tests {
         tracker_fixture_dir(bundle).join("internal_fixtures.safetensors")
     }
 
+    fn load_safetensor_tensor(path: &Path, key: &str) -> Result<Tensor> {
+        use candle::safetensors::Load;
+
+        let tensors =
+            unsafe { candle::safetensors::MmapedSafetensors::new(path) }.map_err(|err| {
+                candle::Error::Msg(format!(
+                    "failed to mmap safetensors {}: {err}",
+                    path.display()
+                ))
+            })?;
+        tensors
+            .get(key)
+            .map_err(|err| {
+                candle::Error::Msg(format!(
+                    "failed to read tensor `{key}` from {}: {err}",
+                    path.display()
+                ))
+            })?
+            .load(&candle::Device::Cpu)
+    }
+
     fn load_tracker_internal_manifest(
         bundle: TrackerFixtureBundle,
     ) -> Result<TrackerInternalManifest> {
@@ -551,6 +572,64 @@ mod tests {
         Ok(())
     }
 
+    fn tensor_max_abs_diff(actual: &Tensor, expected: &Tensor) -> Result<f32> {
+        if actual.shape() != expected.shape() {
+            candle::bail!(
+                "shape mismatch: actual {:?}, expected {:?}",
+                actual.shape().dims(),
+                expected.shape().dims()
+            );
+        }
+        actual
+            .to_dtype(DType::F32)?
+            .broadcast_sub(&expected.to_dtype(DType::F32)?)?
+            .abs()?
+            .flatten_all()?
+            .max(0)?
+            .to_vec0::<f32>()
+    }
+
+    fn tensor_dim1_pairwise_max_abs_diffs(
+        actual: &Tensor,
+        expected: &Tensor,
+    ) -> Result<Vec<Vec<f32>>> {
+        if actual.rank() < 2 || expected.rank() < 2 {
+            candle::bail!(
+                "pairwise dim1 diff requires rank >= 2, got actual rank {} and expected rank {}",
+                actual.rank(),
+                expected.rank()
+            );
+        }
+        if actual.dim(0)? != expected.dim(0)? {
+            candle::bail!(
+                "pairwise dim1 diff batch mismatch: actual {}, expected {}",
+                actual.dim(0)?,
+                expected.dim(0)?
+            );
+        }
+        let actual_width = actual.dim(1)?;
+        let expected_width = expected.dim(1)?;
+        let mut matrix = Vec::with_capacity(actual_width);
+        for actual_idx in 0..actual_width {
+            let actual_slice = actual.i((.., actual_idx))?;
+            let mut row = Vec::with_capacity(expected_width);
+            for expected_idx in 0..expected_width {
+                let expected_slice = expected.i((.., expected_idx))?;
+                row.push(tensor_max_abs_diff(&actual_slice, &expected_slice)?);
+            }
+            matrix.push(row);
+        }
+        Ok(matrix)
+    }
+
+    fn tensor_first_row_f32(actual: &Tensor) -> Result<Vec<f32>> {
+        match actual.rank() {
+            1 => actual.to_dtype(DType::F32)?.to_vec1::<f32>(),
+            2 => actual.i(0)?.to_dtype(DType::F32)?.to_vec1::<f32>(),
+            rank => candle::bail!("expected rank 1 or 2 tensor, got rank {rank}"),
+        }
+    }
+
     fn assert_prompt_frame_point_fixture_matches(
         bundle: TrackerFixtureBundle,
         expected_point_count: usize,
@@ -653,10 +732,438 @@ mod tests {
         token_atol: f32,
         object_score_atol: f32,
     ) -> Result<()> {
-        let _ = (bundle, low_res_atol, iou_atol, token_atol, object_score_atol);
-        candle::bail!(
-            "raw sam_mask_decoder fixture checks require an additional Candle parity accessor for Sam3TrackerModel::sam_mask_decoder.forward"
-        )
+        let Some(model) = load_runtime_tracker_model_from_bundle(bundle)? else {
+            return Ok(());
+        };
+        let manifest = load_tracker_internal_manifest(bundle)?;
+        let stage = tracker_record(&manifest, 0, "sam_mask_decoder")?;
+        let image_embeddings = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.image_embeddings"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let image_pe = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.image_pe"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let sparse_prompt_embeddings = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.sparse_prompt_embeddings"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let dense_prompt_embeddings = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.dense_prompt_embeddings"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let high_res_features = if stage
+            .tensor_keys
+            .contains_key("mask_decoder_inputs.high_res_features.0")
+        {
+            Some(vec![
+                load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["mask_decoder_inputs.high_res_features.0"].as_str(),
+                )?
+                .to_dtype(DType::F32)?,
+                load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["mask_decoder_inputs.high_res_features.1"].as_str(),
+                )?
+                .to_dtype(DType::F32)?,
+            ])
+        } else {
+            None
+        };
+        let actual = model.parity_mask_decoder_forward(
+            &image_embeddings,
+            &image_pe,
+            &sparse_prompt_embeddings,
+            &dense_prompt_embeddings,
+            stage.metadata["multimask_output"]
+                .as_bool()
+                .unwrap_or(false),
+            stage.metadata["repeat_image"].as_bool().unwrap_or(false),
+            high_res_features.as_deref(),
+        )?;
+        let expected_low_res_multimasks = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_output.low_res_multimasks"].as_str(),
+        )?;
+        let expected_ious = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_output.ious"].as_str(),
+        )?;
+        let expected_sam_output_tokens = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_output.sam_output_tokens"].as_str(),
+        )?;
+        let expected_object_score_logits = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_output.object_score_logits"].as_str(),
+        )?;
+        assert_tensor_close(
+            "sam_mask_decoder low_res_multimasks",
+            &actual.low_res_multimasks,
+            &expected_low_res_multimasks,
+            low_res_atol,
+        )?;
+        assert_tensor_close(
+            "sam_mask_decoder ious",
+            &actual.iou_scores,
+            &expected_ious,
+            iou_atol,
+        )?;
+        assert_tensor_close(
+            "sam_mask_decoder sam_output_tokens",
+            &actual.sam_output_tokens,
+            &expected_sam_output_tokens,
+            token_atol,
+        )?;
+        assert_tensor_close(
+            "sam_mask_decoder object_score_logits",
+            &actual.object_score_logits,
+            &expected_object_score_logits,
+            object_score_atol,
+        )?;
+        Ok(())
+    }
+
+    fn assert_prompt_encoder_fixture_matches(
+        bundle: TrackerFixtureBundle,
+        sparse_atol: f32,
+        dense_atol: f32,
+    ) -> Result<()> {
+        let Some(model) = load_runtime_tracker_model_from_bundle(bundle)? else {
+            return Ok(());
+        };
+        let manifest = load_tracker_internal_manifest(bundle)?;
+        let stage = tracker_record(&manifest, 0, "sam_prompt_encoder")?;
+        let points = if stage.metadata["has_points"].as_bool().unwrap_or(false) {
+            let point_coords = normalize_point_coords(
+                &load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["prompt_encoder_inputs.points.0"].as_str(),
+                )?,
+                &candle::Device::Cpu,
+            )?;
+            let point_labels = normalize_point_labels(
+                &load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["prompt_encoder_inputs.points.1"].as_str(),
+                )?,
+                &candle::Device::Cpu,
+            )?;
+            Some((point_coords, point_labels))
+        } else {
+            None
+        };
+        let boxes = if stage.metadata["has_boxes"].as_bool().unwrap_or(false) {
+            Some(
+                load_tracker_fixture_tensor(bundle, stage.tensor_keys["prompt_encoder_inputs.boxes"].as_str())?
+                    .to_dtype(DType::F32)?,
+            )
+        } else {
+            None
+        };
+        let masks = if stage.metadata["has_masks"].as_bool().unwrap_or(false) {
+            Some(
+                load_tracker_fixture_tensor(bundle, stage.tensor_keys["prompt_encoder_inputs.masks"].as_str())?
+                    .to_dtype(DType::F32)?,
+            )
+        } else {
+            None
+        };
+        let actual = model.parity_prompt_encoder_forward(
+            points.as_ref().map(|(coords, labels)| (coords, labels)),
+            boxes.as_ref(),
+            masks.as_ref(),
+        )?;
+        let expected_sparse = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["prompt_encoder_output.sparse_embeddings"].as_str(),
+        )?;
+        let expected_dense = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["prompt_encoder_output.dense_embeddings"].as_str(),
+        )?;
+        assert_tensor_close(
+            "sam_prompt_encoder sparse_embeddings",
+            &actual.sparse_embeddings,
+            &expected_sparse,
+            sparse_atol,
+        )?;
+        assert_tensor_close(
+            "sam_prompt_encoder dense_embeddings",
+            &actual.dense_embeddings,
+            &expected_dense,
+            dense_atol,
+        )?;
+        Ok(())
+    }
+
+    fn print_prompt_encoder_fixture_diffs(bundle: TrackerFixtureBundle) -> Result<()> {
+        let Some(model) = load_runtime_tracker_model_from_bundle(bundle)? else {
+            return Ok(());
+        };
+        let manifest = load_tracker_internal_manifest(bundle)?;
+        let stage = tracker_record(&manifest, 0, "sam_prompt_encoder")?;
+        let points = if stage.metadata["has_points"].as_bool().unwrap_or(false) {
+            let point_coords = normalize_point_coords(
+                &load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["prompt_encoder_inputs.points.0"].as_str(),
+                )?,
+                &candle::Device::Cpu,
+            )?;
+            let point_labels = normalize_point_labels(
+                &load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["prompt_encoder_inputs.points.1"].as_str(),
+                )?,
+                &candle::Device::Cpu,
+            )?;
+            Some((point_coords, point_labels))
+        } else {
+            None
+        };
+        let boxes = if stage.metadata["has_boxes"].as_bool().unwrap_or(false) {
+            Some(
+                load_tracker_fixture_tensor(bundle, stage.tensor_keys["prompt_encoder_inputs.boxes"].as_str())?
+                    .to_dtype(DType::F32)?,
+            )
+        } else {
+            None
+        };
+        let masks = if stage.metadata["has_masks"].as_bool().unwrap_or(false) {
+            Some(
+                load_tracker_fixture_tensor(bundle, stage.tensor_keys["prompt_encoder_inputs.masks"].as_str())?
+                    .to_dtype(DType::F32)?,
+            )
+        } else {
+            None
+        };
+        let actual = model.parity_prompt_encoder_forward(
+            points.as_ref().map(|(coords, labels)| (coords, labels)),
+            boxes.as_ref(),
+            masks.as_ref(),
+        )?;
+        let expected_sparse = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["prompt_encoder_output.sparse_embeddings"].as_str(),
+        )?;
+        let expected_dense = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["prompt_encoder_output.dense_embeddings"].as_str(),
+        )?;
+        eprintln!(
+            "[TRACKER_PROMPT_ENCODER] bundle={:?} sparse_embeddings={:.6} dense_embeddings={:.6}",
+            bundle,
+            tensor_max_abs_diff(&actual.sparse_embeddings, &expected_sparse)?,
+            tensor_max_abs_diff(&actual.dense_embeddings, &expected_dense)?,
+        );
+        Ok(())
+    }
+
+    fn print_mask_decoder_fixture_diffs(bundle: TrackerFixtureBundle) -> Result<()> {
+        let Some(model) = load_runtime_tracker_model_from_bundle(bundle)? else {
+            return Ok(());
+        };
+        let manifest = load_tracker_internal_manifest(bundle)?;
+        let stage = tracker_record(&manifest, 0, "sam_mask_decoder")?;
+        let image_embeddings = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.image_embeddings"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let image_pe = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.image_pe"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let sparse_prompt_embeddings = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.sparse_prompt_embeddings"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let dense_prompt_embeddings = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.dense_prompt_embeddings"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let high_res_features = if stage
+            .tensor_keys
+            .contains_key("mask_decoder_inputs.high_res_features.0")
+        {
+            Some(vec![
+                load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["mask_decoder_inputs.high_res_features.0"].as_str(),
+                )?
+                .to_dtype(DType::F32)?,
+                load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["mask_decoder_inputs.high_res_features.1"].as_str(),
+                )?
+                .to_dtype(DType::F32)?,
+            ])
+        } else {
+            None
+        };
+        let actual = model.parity_mask_decoder_forward(
+            &image_embeddings,
+            &image_pe,
+            &sparse_prompt_embeddings,
+            &dense_prompt_embeddings,
+            stage.metadata["multimask_output"]
+                .as_bool()
+                .unwrap_or(false),
+            stage.metadata["repeat_image"].as_bool().unwrap_or(false),
+            high_res_features.as_deref(),
+        )?;
+        let expected_low_res_multimasks = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_output.low_res_multimasks"].as_str(),
+        )?;
+        let expected_ious = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_output.ious"].as_str(),
+        )?;
+        let expected_sam_output_tokens = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_output.sam_output_tokens"].as_str(),
+        )?;
+        let expected_object_score_logits = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_output.object_score_logits"].as_str(),
+        )?;
+        eprintln!(
+            "[TRACKER_MASK_DECODER] bundle={:?} low_res_multimasks={:.6} ious={:.6} sam_output_tokens={:.6} object_score_logits={:.6}",
+            bundle,
+            tensor_max_abs_diff(&actual.low_res_multimasks, &expected_low_res_multimasks)?,
+            tensor_max_abs_diff(&actual.iou_scores, &expected_ious)?,
+            tensor_max_abs_diff(&actual.sam_output_tokens, &expected_sam_output_tokens)?,
+            tensor_max_abs_diff(&actual.object_score_logits, &expected_object_score_logits)?,
+        );
+        if actual.low_res_multimasks.dim(1)? > 1 {
+            eprintln!(
+                "[TRACKER_MASK_DECODER_MASK_PAIRWISE] bundle={:?} rows=actual cols=expected {:?}",
+                bundle,
+                tensor_dim1_pairwise_max_abs_diffs(
+                    &actual.low_res_multimasks,
+                    &expected_low_res_multimasks,
+                )?,
+            );
+        }
+        if actual.sam_output_tokens.dim(1)? > 1 {
+            eprintln!(
+                "[TRACKER_MASK_DECODER_TOKEN_PAIRWISE] bundle={:?} rows=actual cols=expected {:?}",
+                bundle,
+                tensor_dim1_pairwise_max_abs_diffs(
+                    &actual.sam_output_tokens,
+                    &expected_sam_output_tokens,
+                )?,
+            );
+        }
+        eprintln!(
+            "[TRACKER_MASK_DECODER_IOUS] bundle={:?} actual={:?} expected={:?}",
+            bundle,
+            tensor_first_row_f32(&actual.iou_scores)?,
+            tensor_first_row_f32(&expected_ious)?,
+        );
+        Ok(())
+    }
+
+    fn mask_decoder_debug_fixture_path() -> PathBuf {
+        std::env::var_os("SAM3_MASK_DECODER_DEBUG_FIXTURE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/tmp/issue22_all_points_mask_decoder_debug.safetensors"))
+    }
+
+    fn print_mask_decoder_internal_debug_diffs(bundle: TrackerFixtureBundle) -> Result<()> {
+        let expected_path = mask_decoder_debug_fixture_path();
+        let Some(model) = load_runtime_tracker_model_from_bundle(bundle)? else {
+            return Ok(());
+        };
+        let manifest = load_tracker_internal_manifest(bundle)?;
+        let stage = tracker_record(&manifest, 0, "sam_mask_decoder")?;
+        let image_embeddings = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.image_embeddings"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let image_pe = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.image_pe"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let sparse_prompt_embeddings = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.sparse_prompt_embeddings"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let dense_prompt_embeddings = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["mask_decoder_inputs.dense_prompt_embeddings"].as_str(),
+        )?
+        .to_dtype(DType::F32)?;
+        let high_res_features = if stage
+            .tensor_keys
+            .contains_key("mask_decoder_inputs.high_res_features.0")
+        {
+            Some(vec![
+                load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["mask_decoder_inputs.high_res_features.0"].as_str(),
+                )?
+                .to_dtype(DType::F32)?,
+                load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["mask_decoder_inputs.high_res_features.1"].as_str(),
+                )?
+                .to_dtype(DType::F32)?,
+            ])
+        } else {
+            None
+        };
+        let actual = model.parity_mask_decoder_forward_debug(
+            &image_embeddings,
+            &image_pe,
+            &sparse_prompt_embeddings,
+            &dense_prompt_embeddings,
+            stage.metadata["multimask_output"]
+                .as_bool()
+                .unwrap_or(false),
+            stage.metadata["repeat_image"].as_bool().unwrap_or(false),
+            high_res_features.as_deref(),
+        )?;
+        let comparisons = [
+            ("tokens", &actual.tokens),
+            ("transformer_hs", &actual.transformer_hs),
+            ("transformer_src", &actual.transformer_src),
+            ("iou_token_out", &actual.iou_token_out),
+            ("mask_tokens_out", &actual.mask_tokens_out),
+            ("src_4d", &actual.src_4d),
+            ("upscaled_embedding", &actual.upscaled_embedding),
+            ("hyper_in", &actual.hyper_in),
+            ("all_low_res_masks", &actual.all_low_res_masks),
+            ("all_iou_scores", &actual.all_iou_scores),
+            ("low_res_multimasks", &actual.low_res_multimasks),
+            ("iou_scores", &actual.iou_scores),
+            ("sam_output_tokens", &actual.sam_output_tokens),
+            ("object_score_logits", &actual.object_score_logits),
+        ];
+        for (key, actual_tensor) in comparisons {
+            let expected_tensor = load_safetensor_tensor(&expected_path, key)?.to_dtype(DType::F32)?;
+            eprintln!(
+                "[TRACKER_MASK_DECODER_DEBUG] bundle={:?} key={} diff={:.6}",
+                bundle,
+                key,
+                tensor_max_abs_diff(actual_tensor, &expected_tensor)?,
+            );
+        }
+        Ok(())
     }
 
     fn assert_forward_sam_heads_fixture_matches(
@@ -781,6 +1288,113 @@ mod tests {
             &expected_object_score_logits,
             object_score_atol,
         )?;
+        Ok(())
+    }
+
+    fn print_forward_sam_heads_fixture_diffs(bundle: TrackerFixtureBundle) -> Result<()> {
+        let Some(model) = load_runtime_tracker_model_from_bundle(bundle)? else {
+            return Ok(());
+        };
+        let manifest = load_tracker_internal_manifest(bundle)?;
+        let stage = tracker_record(&manifest, 0, "forward_sam_heads")?;
+        let backbone_features =
+            load_tracker_fixture_tensor(bundle, stage.tensor_keys["backbone_features"].as_str())?
+                .to_dtype(DType::F32)?;
+        let point_prompt = if stage.metadata["has_point_inputs"]
+            .as_bool()
+            .unwrap_or(false)
+        {
+            let point_coords = normalize_point_coords(
+                &load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["point_inputs.point_coords"].as_str(),
+                )?,
+                &candle::Device::Cpu,
+            )?;
+            let point_labels = normalize_point_labels(
+                &load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["point_inputs.point_labels"].as_str(),
+                )?,
+                &candle::Device::Cpu,
+            )?;
+            Some((point_coords, point_labels))
+        } else {
+            None
+        };
+        let mask_inputs = if stage.metadata["has_mask_inputs"].as_bool().unwrap_or(false) {
+            Some(
+                load_tracker_fixture_tensor(bundle, stage.tensor_keys["mask_inputs"].as_str())?
+                    .to_dtype(DType::F32)?,
+            )
+        } else {
+            None
+        };
+        let high_res_features = if stage.tensor_keys.contains_key("high_res_features.0") {
+            Some(vec![
+                load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["high_res_features.0"].as_str(),
+                )?
+                .to_dtype(DType::F32)?,
+                load_tracker_fixture_tensor(
+                    bundle,
+                    stage.tensor_keys["high_res_features.1"].as_str(),
+                )?
+                .to_dtype(DType::F32)?,
+            ])
+        } else {
+            None
+        };
+        let actual = model.parity_forward_sam_heads_with_multimasks(
+            &backbone_features,
+            point_prompt.as_ref(),
+            mask_inputs.as_ref(),
+            high_res_features.as_deref(),
+            stage.metadata["multimask_output"]
+                .as_bool()
+                .unwrap_or(false),
+            true,
+        )?;
+        let expected_low_res_multimasks = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["forward_sam_heads_output.low_res_multimasks"].as_str(),
+        )?;
+        let expected_high_res_multimasks = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["forward_sam_heads_output.high_res_multimasks"].as_str(),
+        )?;
+        let expected_low_res_masks = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["forward_sam_heads_output.low_res_masks"].as_str(),
+        )?;
+        let expected_high_res_masks = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["forward_sam_heads_output.high_res_masks"].as_str(),
+        )?;
+        let expected_ious = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["forward_sam_heads_output.ious"].as_str(),
+        )?;
+        let expected_obj_ptr = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["forward_sam_heads_output.obj_ptr"].as_str(),
+        )?;
+        let expected_object_score_logits = load_tracker_fixture_tensor(
+            bundle,
+            stage.tensor_keys["forward_sam_heads_output.object_score_logits"].as_str(),
+        )?;
+        eprintln!(
+            "[TRACKER_SAM_HEADS] bundle={:?} low_res_multimasks={:.6} high_res_multimasks={:.6} low_res_masks={:.6} high_res_masks={:.6} ious={:.6} obj_ptr={:.6} object_score_logits={:.6}",
+            bundle,
+            tensor_max_abs_diff(&actual.low_res_multimasks, &expected_low_res_multimasks)?,
+            tensor_max_abs_diff(&actual.high_res_multimasks, &expected_high_res_multimasks)?,
+            tensor_max_abs_diff(&actual.state.low_res_masks, &expected_low_res_masks)?,
+            tensor_max_abs_diff(&actual.state.high_res_masks, &expected_high_res_masks)?,
+            tensor_max_abs_diff(&actual.state.iou_scores, &expected_ious)?,
+            tensor_max_abs_diff(&actual.state.obj_ptr, &expected_obj_ptr)?,
+            tensor_max_abs_diff(&actual.state.object_score_logits, &expected_object_score_logits)?,
+        );
         Ok(())
     }
 

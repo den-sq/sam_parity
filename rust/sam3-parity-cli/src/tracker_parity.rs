@@ -711,7 +711,7 @@
     }
 
     #[test]
-    #[ignore = "requires a raw sam_mask_decoder parity accessor in candle-sam3"]
+    #[ignore = "issue-21 localization helper"]
     fn tracker_mask_decoder_matches_single_click_fixture_values() -> Result<()> {
         assert_mask_decoder_fixture_matches(
             TrackerFixtureBundle::PointSingleClick,
@@ -723,7 +723,31 @@
     }
 
     #[test]
-    #[ignore = "requires a raw sam_mask_decoder parity accessor in candle-sam3"]
+    #[ignore = "issue-22 localization helper"]
+    fn tracker_mask_decoder_matches_multi_click_fixture_values() -> Result<()> {
+        assert_mask_decoder_fixture_matches(
+            TrackerFixtureBundle::PointMultiClick,
+            1.0,
+            0.2,
+            0.5,
+            0.5,
+        )
+    }
+
+    #[test]
+    #[ignore = "issue-21 localization helper"]
+    fn tracker_mask_decoder_matches_all_points_fixture_values() -> Result<()> {
+        assert_mask_decoder_fixture_matches(
+            TrackerFixtureBundle::PointAllPoints,
+            1.0,
+            0.2,
+            0.5,
+            0.5,
+        )
+    }
+
+    #[test]
+    #[ignore = "issue-21 localization helper"]
     fn tracker_mask_decoder_matches_multimask_disabled_sam_fixture_values() -> Result<()> {
         assert_mask_decoder_fixture_matches(
             TrackerFixtureBundle::MultimaskDisabledSam,
@@ -732,6 +756,62 @@
             0.5,
             0.5,
         )
+    }
+
+    #[test]
+    #[ignore = "issue-21 localization helper"]
+    fn tracker_mask_decoder_single_click_prints_stage_diffs() -> Result<()> {
+        print_mask_decoder_fixture_diffs(TrackerFixtureBundle::PointSingleClick)
+    }
+
+    #[test]
+    #[ignore = "issue-22 localization helper"]
+    fn tracker_mask_decoder_multi_click_prints_stage_diffs() -> Result<()> {
+        print_mask_decoder_fixture_diffs(TrackerFixtureBundle::PointMultiClick)
+    }
+
+    #[test]
+    #[ignore = "issue-22 localization helper"]
+    fn tracker_mask_decoder_all_points_prints_stage_diffs() -> Result<()> {
+        print_mask_decoder_fixture_diffs(TrackerFixtureBundle::PointAllPoints)
+    }
+
+    #[test]
+    #[ignore = "issue-22 localization helper"]
+    fn tracker_mask_decoder_all_points_prints_internal_debug_diffs() -> Result<()> {
+        print_mask_decoder_internal_debug_diffs(TrackerFixtureBundle::PointAllPoints)
+    }
+
+    #[test]
+    #[ignore = "issue-22 localization helper"]
+    fn tracker_prompt_encoder_matches_single_click_fixture_values() -> Result<()> {
+        assert_prompt_encoder_fixture_matches(
+            TrackerFixtureBundle::PointSingleClick,
+            1.0,
+            1.0,
+        )
+    }
+
+    #[test]
+    #[ignore = "issue-22 localization helper"]
+    fn tracker_prompt_encoder_matches_all_points_fixture_values() -> Result<()> {
+        assert_prompt_encoder_fixture_matches(
+            TrackerFixtureBundle::PointAllPoints,
+            1.0,
+            1.0,
+        )
+    }
+
+    #[test]
+    #[ignore = "issue-22 localization helper"]
+    fn tracker_prompt_encoder_single_click_prints_stage_diffs() -> Result<()> {
+        print_prompt_encoder_fixture_diffs(TrackerFixtureBundle::PointSingleClick)
+    }
+
+    #[test]
+    #[ignore = "issue-22 localization helper"]
+    fn tracker_prompt_encoder_all_points_prints_stage_diffs() -> Result<()> {
+        print_prompt_encoder_fixture_diffs(TrackerFixtureBundle::PointAllPoints)
     }
 
     #[test]
@@ -768,6 +848,24 @@
             0.5,
             0.5,
         )
+    }
+
+    #[test]
+    #[ignore = "issue-21 localization helper"]
+    fn tracker_forward_sam_heads_single_click_prints_stage_diffs() -> Result<()> {
+        print_forward_sam_heads_fixture_diffs(TrackerFixtureBundle::PointSingleClick)
+    }
+
+    #[test]
+    #[ignore = "issue-21 localization helper"]
+    fn tracker_forward_sam_heads_all_points_prints_stage_diffs() -> Result<()> {
+        print_forward_sam_heads_fixture_diffs(TrackerFixtureBundle::PointAllPoints)
+    }
+
+    #[test]
+    #[ignore = "issue-21 localization helper"]
+    fn tracker_forward_sam_heads_multimask_disabled_sam_prints_stage_diffs() -> Result<()> {
+        print_forward_sam_heads_fixture_diffs(TrackerFixtureBundle::MultimaskDisabledSam)
     }
 
     #[test]
