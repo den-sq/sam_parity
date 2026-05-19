@@ -211,4 +211,8 @@ __marimo__/
 
 
 # test data
-tests/
+tests/*
+!tests/data/
+tests/data/*
+!tests/data/sam3_video_notebook_0001_first30/
+!tests/data/sam3_video_notebook_0001_first30/**

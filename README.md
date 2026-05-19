@@ -124,6 +124,14 @@ Notes:
   checkpoint and tokenizer environment variables used throughout this repo.
 - Bundle-backed tests read from `tests/reference-bundles` by default and skip or
   fail meaningfully when the required generated artifacts are absent.
+- The canonical short SAM3 notebook-video sample for issue `#20` through `#22`
+  lives under `tests/data/sam3_video_notebook_0001_first30/frames` and is a
+  direct copy of the first 30 frames from upstream `assets/videos/0001`.
+- Use that `tests/data/.../frames` directory for short notebook-style example
+  runs; the older `tests/reference-bundles/reference_video_*` artifacts are
+  parity fixtures and some historical ones were exported from a different video.
+- Concrete notebook-video commands live in
+  [docs/SAM3_NOTEBOOK_VIDEO_EXAMPLES.md](docs/SAM3_NOTEBOOK_VIDEO_EXAMPLES.md).
 
 ## Dependency Model
 
