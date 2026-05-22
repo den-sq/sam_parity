@@ -1,8 +1,7 @@
     #[test]
     fn video_process_frame_matches_visual_box_reference_bundle_frame0() -> Result<()> {
         let bundle = "reference_video_box_debug";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
@@ -50,22 +49,73 @@
             )?
         };
         assert_eq!(output.frame_idx, 0);
-        assert_eq!(output.objects.len(), 1);
+        if output.objects.len() != 1 {
+            let expected_obj_ids = load_reference_frame_object_ids(bundle, 0)?;
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "visual_box_frame0_object_count",
+                &[&output],
+                &[(0, expected_obj_ids)],
+                serde_json::json!({
+                    "actual_object_count": output.objects.len(),
+                    "expected_object_count": 1,
+                }),
+            ));
+            panic!(
+                "frame-0 visual box object count mismatch: actual={}, expected=1; {dump}",
+                output.objects.len()
+            );
+        }
         let actual = &output.objects[0];
+        let expected_obj_ids = load_reference_frame_object_ids(bundle, 0)?;
         let (expected_boxes, expected_score, expected_mask_path) =
             load_reference_frame0_output(bundle)?;
-        assert_boxes_close(
-            &actual.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?,
-            &expected_boxes,
-            0.03,
-        );
+        let actual_boxes = actual.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?;
+        if let Some(message) = box_mismatch_message(&actual_boxes, &expected_boxes, 0.03) {
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "visual_box_frame0_box",
+                &[&output],
+                &[(0, expected_obj_ids.clone())],
+                serde_json::json!({
+                    "failure": message,
+                    "actual_boxes_xyxy": actual_boxes,
+                    "expected_boxes_xyxy": expected_boxes,
+                }),
+            ));
+            panic!("{message}; {dump}");
+        }
         let actual_score = actual.parity_score_value()?;
-        assert!(
-            (actual_score - expected_score).abs() <= 0.02,
-            "frame-0 box score mismatch: actual={actual_score}, expected={expected_score}"
-        );
+        if (actual_score - expected_score).abs() > 0.02 {
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "visual_box_frame0_score",
+                &[&output],
+                &[(0, expected_obj_ids.clone())],
+                serde_json::json!({
+                    "actual_score": actual_score,
+                    "expected_score": expected_score,
+                    "atol": 0.02,
+                }),
+            ));
+            panic!(
+                "frame-0 box score mismatch: actual={actual_score}, expected={expected_score}; {dump}"
+            );
+        }
         let mask_iou = binary_mask_iou(&actual.masks, &expected_mask_path)?;
-        assert!(mask_iou >= 0.97, "frame-0 box mask IoU too low: {mask_iou}");
+        if mask_iou < 0.97 {
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "visual_box_frame0_mask",
+                &[&output],
+                &[(0, expected_obj_ids)],
+                serde_json::json!({
+                    "mask_iou": mask_iou,
+                    "minimum_iou": 0.97,
+                }),
+            ));
+            panic!("frame-0 box mask IoU too low: {mask_iou}; {dump}");
+        }
         Ok(())
     }
     #[test]
@@ -78,8 +128,7 @@
     #[ignore = "checkpoint-backed Step 6 frame-1 parity; slow on CPU"]
     fn video_process_frame_matches_single_click_point_reference_bundle_frame1() -> Result<()> {
         let bundle = "reference_video_point_debug_single_click";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -173,9 +222,9 @@
             .next()
             .unwrap_or(0.0);
         assert!(
-            (actual_presence_score - expected_presence_score).abs() <= 0.02,
-            "frame-1 point presence score mismatch: actual={actual_presence_score}, expected={expected_presence_score}"
-        );
+                (actual_presence_score - expected_presence_score).abs() <= 0.02,
+                "frame-1 point presence score mismatch: actual={actual_presence_score}, expected={expected_presence_score}"
+            );
         let mask_iou = binary_mask_iou_tensor(&actual.masks, &expected_masks)?;
         assert!(
             mask_iou >= 0.97,
@@ -204,11 +253,8 @@
         Ok(())
     }
 
-    fn assert_video_process_frame_matches_point_reference_bundle_frame0(
-        bundle: &str,
-    ) -> Result<()> {
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+    fn assert_video_process_frame_matches_point_reference_bundle_frame0(bundle: &str) -> Result<()> {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -258,9 +304,9 @@
         );
         let actual_score = actual.parity_score_value()?;
         assert!(
-            (actual_score - expected_score).abs() <= 0.02,
-            "frame-0 point score mismatch for {bundle}: actual={actual_score}, expected={expected_score}"
-        );
+                (actual_score - expected_score).abs() <= 0.02,
+                "frame-0 point score mismatch for {bundle}: actual={actual_score}, expected={expected_score}"
+            );
         let mask_iou = binary_mask_iou(&actual.masks, &expected_mask_path)?;
         let min_mask_iou = match bundle {
             // The all-points tracker path is still limited here by the known
@@ -287,8 +333,7 @@
         bundle: &str,
         expectations: CorrectionBundleExpectations,
     ) -> Result<()> {
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -319,8 +364,7 @@
                 output_prob_threshold: None,
             },
         )?;
-        let (correction_points, correction_labels) =
-            load_reference_point_prompt_on_frame(bundle, 8)?;
+        let (correction_points, correction_labels) = load_reference_point_prompt_on_frame(bundle, 8)?;
         predictor.add_prompt(
             &session_id,
             8,
@@ -377,23 +421,19 @@
         let actual_boxes8 = actual8.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?;
         let actual_score8 = actual8.parity_score_value()?;
         let mask_iou8 = binary_mask_iou(&actual8.masks, &expected_mask_path8)?;
-        let correction_track_step = load_reference_internal_record_matching(
-            bundle,
-            "track_step",
-            8,
-            |record| record["metadata"]["run_mem_encoder"].as_bool() == Some(false),
-        )?;
+        let correction_track_step =
+            load_reference_internal_record_matching(bundle, "track_step", 8, |record| {
+                record["metadata"]["run_mem_encoder"].as_bool() == Some(false)
+            })?;
         assert_eq!(
             correction_track_step["metadata"]["use_prev_mem_frame"].as_bool(),
             Some(expectations.frame8_use_prev_mem_frame),
             "frame-8 correction use_prev_mem_frame mismatch for {bundle}"
         );
-        let correction_forward = load_reference_internal_record_matching(
-            bundle,
-            "forward_sam_heads",
-            8,
-            |record| record["metadata"]["has_point_inputs"].as_bool() == Some(true),
-        )?;
+        let correction_forward =
+            load_reference_internal_record_matching(bundle, "forward_sam_heads", 8, |record| {
+                record["metadata"]["has_point_inputs"].as_bool() == Some(true)
+            })?;
         assert_eq!(
             correction_forward["metadata"]["has_mask_inputs"].as_bool(),
             Some(expectations.frame8_has_mask_inputs),
@@ -485,12 +525,14 @@
             json_usize_vec(&prepare_record["metadata"], "selected_memory_frame_indices")?;
         let mut failures = Vec::new();
         if let Some(message) = box_mismatch_message(&actual_boxes8, &expected_boxes8, 0.04) {
-            failures.push(format!("frame-8 correction box mismatch for {bundle}: {message}"));
+            failures.push(format!(
+                "frame-8 correction box mismatch for {bundle}: {message}"
+            ));
         }
         if (actual_score8 - expected_score8).abs() > 0.03 {
             failures.push(format!(
-                "frame-8 correction score mismatch for {bundle}: actual={actual_score8}, expected={expected_score8}"
-            ));
+                    "frame-8 correction score mismatch for {bundle}: actual={actual_score8}, expected={expected_score8}"
+                ));
         }
         if mask_iou8 < 0.95 {
             failures.push(format!(
@@ -510,17 +552,17 @@
             != Some(expectations.frame8_has_mask_inputs)
         {
             failures.push(format!(
-                "frame-8 correction mask-input expectation mismatch for {bundle}: actual={:?}, expected={}",
-                correction_forward["metadata"]["has_mask_inputs"].as_bool(),
-                expectations.frame8_has_mask_inputs
-            ));
+                    "frame-8 correction mask-input expectation mismatch for {bundle}: actual={:?}, expected={}",
+                    correction_forward["metadata"]["has_mask_inputs"].as_bool(),
+                    expectations.frame8_has_mask_inputs
+                ));
         }
         if frame8_state.is_cond_frame != expectations.frame9_cond_contains_frame8 {
             failures.push(format!(
-                "frame-8 corrected state conditioning expectation mismatch for {bundle}: actual={}, expected={}",
-                frame8_state.is_cond_frame,
-                expectations.frame9_cond_contains_frame8
-            ));
+                    "frame-8 corrected state conditioning expectation mismatch for {bundle}: actual={}, expected={}",
+                    frame8_state.is_cond_frame,
+                    expectations.frame9_cond_contains_frame8
+                ));
         }
         if frame8_state.maskmem_features.is_none() {
             failures.push(format!(
@@ -539,8 +581,8 @@
         }
         if (actual_score9 - expected_score9).abs() > 0.03 {
             failures.push(format!(
-                "frame-9 correction propagation score mismatch for {bundle}: actual={actual_score9}, expected={expected_score9}"
-            ));
+                    "frame-9 correction propagation score mismatch for {bundle}: actual={actual_score9}, expected={expected_score9}"
+                ));
         }
         if mask_iou9 < 0.95 {
             failures.push(format!(
@@ -549,15 +591,14 @@
         }
         if selected_cond.contains(&8) != expectations.frame9_cond_contains_frame8 {
             failures.push(format!(
-                "frame-9 conditioning selection mismatch for {bundle}: actual={selected_cond:?}, expected_contains_frame8={}",
-                expectations.frame9_cond_contains_frame8
-            ));
+                    "frame-9 conditioning selection mismatch for {bundle}: actual={selected_cond:?}, expected_contains_frame8={}",
+                    expectations.frame9_cond_contains_frame8
+                ));
         }
         if actual9.memory_frame_indices != expected_memory_frame_indices {
             failures.push(format!(
                 "frame-9 memory_frame_indices mismatch for {bundle}: actual={:?}, expected={:?}",
-                actual9.memory_frame_indices,
-                expected_memory_frame_indices
+                actual9.memory_frame_indices, expected_memory_frame_indices
             ));
         }
         if !failures.is_empty() {
@@ -609,8 +650,7 @@
     #[test]
     fn video_process_frame_matches_mask_prompt_reference_bundle_frame0() -> Result<()> {
         let bundle = "reference_video_mask_debug";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -664,8 +704,7 @@
     }
 
     #[test]
-    fn video_process_frame_matches_correction_click_reference_bundle_frames_8_and_9() -> Result<()>
-    {
+    fn video_process_frame_matches_correction_click_reference_bundle_frames_8_and_9() -> Result<()> {
         assert_video_process_frame_matches_correction_click_reference_bundle_frames_8_and_9(
             "reference_video_correction_click_debug",
             CorrectionBundleExpectations {
@@ -750,7 +789,10 @@
             |_| true,
         )?;
         assert_eq!(
-            json_usize_vec(&prepare_record["metadata"], "selected_conditioning_frame_indices")?,
+            json_usize_vec(
+                &prepare_record["metadata"],
+                "selected_conditioning_frame_indices"
+            )?,
             vec![0, 8]
         );
         let prepare_record = load_reference_internal_record_matching_last(
@@ -760,7 +802,10 @@
             |_| true,
         )?;
         assert_eq!(
-            json_usize_vec(&prepare_record["metadata"], "selected_conditioning_frame_indices")?,
+            json_usize_vec(
+                &prepare_record["metadata"],
+                "selected_conditioning_frame_indices"
+            )?,
             vec![0]
         );
         Ok(())
@@ -769,8 +814,7 @@
     #[test]
     fn video_process_frame_matches_multi_object_reference_bundle_frames_0_and_1() -> Result<()> {
         let bundle = "reference_video_multi_object_debug";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -838,9 +882,9 @@
                 );
                 let actual_score = actual.parity_score_value()?;
                 assert!(
-                    (actual_score - expected_score).abs() <= 0.03,
-                    "multi-object frame {frame_idx} obj_id {obj_id} score mismatch: actual={actual_score}, expected={expected_score}"
-                );
+                        (actual_score - expected_score).abs() <= 0.03,
+                        "multi-object frame {frame_idx} obj_id {obj_id} score mismatch: actual={actual_score}, expected={expected_score}"
+                    );
                 let mask_iou = binary_mask_iou(&actual.masks, &expected_mask_path)?;
                 assert!(
                     mask_iou >= 0.95,
@@ -852,11 +896,10 @@
     }
 
     #[test]
-    fn video_process_frame_matches_multi_object_clear_mem_reference_bundle_frames_8_to_10(
-    ) -> Result<()> {
+    fn video_process_frame_matches_multi_object_clear_mem_reference_bundle_frames_8_to_10() -> Result<()>
+    {
         let bundle = "reference_video_multi_object_clear_mem_debug";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -900,8 +943,7 @@
                 output_prob_threshold: None,
             },
         )?;
-        let (correction_points, correction_labels) =
-            load_reference_point_prompt_on_frame(bundle, 8)?;
+        let (correction_points, correction_labels) = load_reference_point_prompt_on_frame(bundle, 8)?;
         predictor.add_prompt(
             &session_id,
             8,
@@ -949,14 +991,14 @@
                 );
                 let actual_score = actual.parity_score_value()?;
                 assert!(
-                    (actual_score - expected_score).abs() <= 0.03,
-                    "multi-object clear-mem frame {frame_idx} obj_id {obj_id} score mismatch: actual={actual_score}, expected={expected_score}"
-                );
+                        (actual_score - expected_score).abs() <= 0.03,
+                        "multi-object clear-mem frame {frame_idx} obj_id {obj_id} score mismatch: actual={actual_score}, expected={expected_score}"
+                    );
                 let mask_iou = binary_mask_iou(&actual.masks, &expected_mask_path)?;
                 assert!(
-                    mask_iou >= 0.95,
-                    "multi-object clear-mem frame {frame_idx} obj_id {obj_id} mask IoU too low: {mask_iou}"
-                );
+                        mask_iou >= 0.95,
+                        "multi-object clear-mem frame {frame_idx} obj_id {obj_id} mask IoU too low: {mask_iou}"
+                    );
             }
         }
 
@@ -990,9 +1032,9 @@
         );
         let actual_score10 = actual10.parity_score_value()?;
         assert!(
-            (actual_score10 - expected_score10).abs() <= 0.03,
-            "multi-object clear-mem frame 10 obj_id 1 score mismatch: actual={actual_score10}, expected={expected_score10}"
-        );
+                (actual_score10 - expected_score10).abs() <= 0.03,
+                "multi-object clear-mem frame 10 obj_id 1 score mismatch: actual={actual_score10}, expected={expected_score10}"
+            );
         let mask_iou10 = binary_mask_iou(&actual10.masks, &expected_mask_path10)?;
         assert!(
             mask_iou10 >= 0.95,
@@ -1004,8 +1046,7 @@
     #[test]
     fn video_process_frame_matches_reverse_reference_bundle_frames_20_and_19() -> Result<()> {
         let bundle = "reference_video_reverse_propagation_debug";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -1054,26 +1095,32 @@
             );
             let actual_score = actual.parity_score_value()?;
             assert!(
-                (actual_score - expected_score).abs() <= 0.03,
-                "reverse frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
-            );
+                    (actual_score - expected_score).abs() <= 0.03,
+                    "reverse frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
+                );
             let mask_iou = binary_mask_iou(&actual.masks, &expected_mask_path)?;
             assert!(
                 mask_iou >= 0.95,
                 "reverse frame {frame_idx} mask IoU too low: {mask_iou}"
             );
         }
-        let prepare_record = load_reference_internal_record(bundle, "prepare_memory_conditioned_features", 19)?;
+        let prepare_record =
+            load_reference_internal_record(bundle, "prepare_memory_conditioned_features", 19)?;
         let expected_memory_frame_indices =
             json_usize_vec(&prepare_record["metadata"], "selected_memory_frame_indices")?;
-        let expected_cond_frame_indices =
-            json_usize_vec(&prepare_record["metadata"], "selected_conditioning_frame_indices")?;
+        let expected_cond_frame_indices = json_usize_vec(
+            &prepare_record["metadata"],
+            "selected_conditioning_frame_indices",
+        )?;
         let frame19 = predictor
             .parity_session(&session_id)
             .and_then(|session| session.parity_frame_outputs().get(&19))
             .and_then(|outputs| outputs.get(&1))
             .expect("reverse frame 19 output should be cached");
-        assert_eq!(frame19.prompt_frame_idx, expected_cond_frame_indices.last().copied());
+        assert_eq!(
+            frame19.prompt_frame_idx,
+            expected_cond_frame_indices.last().copied()
+        );
         assert_eq!(frame19.memory_frame_indices, expected_memory_frame_indices);
         Ok(())
     }
@@ -1081,8 +1128,7 @@
     fn assert_video_process_frame_matches_fill_hole_reference_bundle_frames_0_and_1(
         bundle: &str,
     ) -> Result<()> {
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
@@ -1141,9 +1187,9 @@
             );
             let actual_score = actual.parity_score_value()?;
             assert!(
-                (actual_score - expected_score).abs() <= 0.03,
-                "fill-hole bundle {bundle} frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
-            );
+                    (actual_score - expected_score).abs() <= 0.03,
+                    "fill-hole bundle {bundle} frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
+                );
             let mask_iou = binary_mask_iou(&actual.masks, &expected_mask_path)?;
             assert!(
                 mask_iou >= 0.95,
@@ -1156,8 +1202,7 @@
     fn assert_video_process_frame_matches_empty_output_reference_bundle_frames_0_and_1(
         bundle: &str,
     ) -> Result<()> {
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -1208,14 +1253,10 @@
             let frames = match &value {
                 serde_json::Value::Array(frames) => frames,
                 serde_json::Value::Object(_) => value["frames"].as_array().ok_or_else(|| {
-                    candle::Error::Msg(
-                        "reference video results missing frames array".to_owned(),
-                    )
+                    candle::Error::Msg("reference video results missing frames array".to_owned())
                 })?,
                 _ => {
-                    candle::bail!(
-                        "reference video results must be an array or object with frames"
-                    )
+                    candle::bail!("reference video results must be an array or object with frames")
                 }
             };
             let frame = frames
@@ -1243,11 +1284,9 @@
     }
 
     #[test]
-    fn video_process_frame_matches_output_non_overlap_reference_bundle_frames_0_and_1(
-    ) -> Result<()> {
+    fn video_process_frame_matches_output_non_overlap_reference_bundle_frames_0_and_1() -> Result<()> {
         let bundle = "reference_video_output_non_overlap_debug";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -1304,40 +1343,82 @@
                 .iter()
                 .map(|object| object.obj_id)
                 .collect::<Vec<_>>();
-            assert_eq!(actual_obj_ids, vec![2]);
+            let expected_obj_ids = vec![2];
+            if actual_obj_ids != expected_obj_ids {
+                let dump = format_failure_dump(dump_video_failure_context(
+                    bundle,
+                    &format!("output_non_overlap_frame{frame_idx}_object_ids"),
+                    &[&output],
+                    &[(frame_idx, expected_obj_ids.clone())],
+                    serde_json::json!({
+                        "actual_obj_ids": actual_obj_ids,
+                        "expected_obj_ids": expected_obj_ids,
+                    }),
+                ));
+                panic!("output-non-overlap frame {frame_idx} object ids mismatch; {dump}");
+            }
             let actual = &output.objects[0];
             let (expected_boxes, expected_score, expected_mask_path) =
                 load_reference_object_frame_output(bundle, frame_idx, 2)?;
-            assert_boxes_close(
-                &actual.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?,
-                &expected_boxes,
-                0.05,
-            );
+            let actual_boxes = actual.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?;
+            if let Some(message) = box_mismatch_message(&actual_boxes, &expected_boxes, 0.05) {
+                let dump = format_failure_dump(dump_video_failure_context(
+                    bundle,
+                    &format!("output_non_overlap_frame{frame_idx}_box"),
+                    &[&output],
+                    &[(frame_idx, vec![2])],
+                    serde_json::json!({
+                        "failure": message,
+                        "actual_boxes_xyxy": actual_boxes,
+                        "expected_boxes_xyxy": expected_boxes,
+                    }),
+                ));
+                panic!("{message}; {dump}");
+            }
             let actual_score = actual.parity_score_value()?;
-            assert!(
-                (actual_score - expected_score).abs() <= 0.03,
-                "output-non-overlap frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
-            );
+            if (actual_score - expected_score).abs() > 0.03 {
+                let dump = format_failure_dump(dump_video_failure_context(
+                    bundle,
+                    &format!("output_non_overlap_frame{frame_idx}_score"),
+                    &[&output],
+                    &[(frame_idx, vec![2])],
+                    serde_json::json!({
+                        "actual_score": actual_score,
+                        "expected_score": expected_score,
+                        "atol": 0.03,
+                    }),
+                ));
+                panic!(
+                        "output-non-overlap frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}; {dump}"
+                    );
+            }
             let mask_iou = binary_mask_iou(&actual.masks, &expected_mask_path)?;
-            assert!(
-                mask_iou >= 0.95,
-                "output-non-overlap frame {frame_idx} mask IoU too low: {mask_iou}"
-            );
+            if mask_iou < 0.95 {
+                let dump = format_failure_dump(dump_video_failure_context(
+                    bundle,
+                    &format!("output_non_overlap_frame{frame_idx}_mask"),
+                    &[&output],
+                    &[(frame_idx, vec![2])],
+                    serde_json::json!({
+                        "mask_iou": mask_iou,
+                        "minimum_iou": 0.95,
+                    }),
+                ));
+                panic!("output-non-overlap frame {frame_idx} mask IoU too low: {mask_iou}; {dump}");
+            }
         }
         Ok(())
     }
 
     #[test]
-    fn video_process_frame_matches_fill_hole_disabled_reference_bundle_frames_0_and_1(
-    ) -> Result<()> {
+    fn video_process_frame_matches_fill_hole_disabled_reference_bundle_frames_0_and_1() -> Result<()> {
         assert_video_process_frame_matches_fill_hole_reference_bundle_frames_0_and_1(
             "reference_video_fill_hole_disabled_debug",
         )
     }
 
     #[test]
-    fn video_process_frame_matches_fill_hole_enabled_reference_bundle_frames_0_and_1(
-    ) -> Result<()> {
+    fn video_process_frame_matches_fill_hole_enabled_reference_bundle_frames_0_and_1() -> Result<()> {
         assert_video_process_frame_matches_fill_hole_reference_bundle_frames_0_and_1(
             "reference_video_fill_hole_enabled_debug",
         )
@@ -1353,8 +1434,7 @@
     #[test]
     fn video_propagation_matches_temporal_disambiguation_reference_bundle() -> Result<()> {
         let bundle = "reference_video_box_debug_temporal_disambiguation";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
@@ -1399,30 +1479,111 @@
             .map(|frame| frame.frame_idx)
             .collect::<Vec<_>>();
         let expected_non_empty = load_reference_frame_indices(bundle)?;
-        assert_eq!(actual_non_empty, expected_non_empty);
+        if actual_non_empty != expected_non_empty {
+            let actual_dump_frames = output
+                .frames
+                .iter()
+                .filter(|frame| !frame.objects.is_empty())
+                .take(5)
+                .collect::<Vec<_>>();
+            let mut expected_frame_obj_ids = Vec::new();
+            for frame in &actual_dump_frames {
+                expected_frame_obj_ids.push((
+                    frame.frame_idx,
+                    load_reference_frame_object_ids(bundle, frame.frame_idx)?,
+                ));
+            }
+            if expected_frame_obj_ids.is_empty() {
+                for frame_idx in expected_non_empty.iter().take(5) {
+                    expected_frame_obj_ids.push((
+                        *frame_idx,
+                        load_reference_frame_object_ids(bundle, *frame_idx)?,
+                    ));
+                }
+            }
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "temporal_disambiguation_non_empty_frames",
+                &actual_dump_frames,
+                &expected_frame_obj_ids,
+                serde_json::json!({
+                    "actual_non_empty": actual_non_empty,
+                    "expected_non_empty": expected_non_empty,
+                    "dumped_actual_non_empty_frame_limit": 5,
+                }),
+            ));
+            panic!("temporal-disambiguation non-empty frame mismatch; {dump}");
+        }
         let frame0 = output
             .frames
             .iter()
             .find(|frame| frame.frame_idx == 0)
             .ok_or_else(|| candle::Error::Msg("missing propagated frame 0".to_owned()))?;
-        assert_eq!(frame0.objects.len(), 1);
+        if frame0.objects.len() != 1 {
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "temporal_disambiguation_frame0_object_count",
+                &[frame0],
+                &[(0, load_reference_frame_object_ids(bundle, 0)?)],
+                serde_json::json!({
+                    "actual_object_count": frame0.objects.len(),
+                    "expected_object_count": 1,
+                }),
+            ));
+            panic!(
+                "temporal-disambiguation frame 0 object count mismatch: actual={}, expected=1; {dump}",
+                frame0.objects.len()
+            );
+        }
         let actual = &frame0.objects[0];
-        let (expected_boxes, expected_score, expected_mask_path) = load_reference_frame0_output(bundle)?;
-        assert_boxes_close(
-            &actual.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?,
-            &expected_boxes,
-            0.05,
-        );
+        let (expected_boxes, expected_score, expected_mask_path) =
+            load_reference_frame0_output(bundle)?;
+        let actual_boxes = actual.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?;
+        if let Some(message) = box_mismatch_message(&actual_boxes, &expected_boxes, 0.05) {
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "temporal_disambiguation_frame0_box",
+                &[frame0],
+                &[(0, load_reference_frame_object_ids(bundle, 0)?)],
+                serde_json::json!({
+                    "failure": message,
+                    "actual_boxes_xyxy": actual_boxes,
+                    "expected_boxes_xyxy": expected_boxes,
+                }),
+            ));
+            panic!("{message}; {dump}");
+        }
         let actual_score = actual.parity_score_value()?;
-        assert!(
-            (actual_score - expected_score).abs() <= 0.03,
-            "temporal-disambiguation frame 0 score mismatch: actual={actual_score}, expected={expected_score}"
-        );
+        if (actual_score - expected_score).abs() > 0.03 {
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "temporal_disambiguation_frame0_score",
+                &[frame0],
+                &[(0, load_reference_frame_object_ids(bundle, 0)?)],
+                serde_json::json!({
+                    "actual_score": actual_score,
+                    "expected_score": expected_score,
+                    "atol": 0.03,
+                }),
+            ));
+            panic!(
+                    "temporal-disambiguation frame 0 score mismatch: actual={actual_score}, expected={expected_score}; {dump}"
+                );
+        }
         let mask_iou = binary_mask_iou(&actual.masks, &expected_mask_path)?;
-        assert!(
-            mask_iou >= 0.95,
-            "temporal-disambiguation frame 0 mask IoU too low: {mask_iou}"
-        );
+        if mask_iou < 0.95 {
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "temporal_disambiguation_frame0_mask",
+                &[frame0],
+                &[(0, load_reference_frame_object_ids(bundle, 0)?)],
+                serde_json::json!({
+                    "mask_iou": mask_iou,
+                    "minimum_iou": 0.95,
+                }),
+            ));
+            panic!("temporal-disambiguation frame 0 mask IoU too low: {mask_iou}; {dump}");
+        }
         for frame_idx in [1usize, 2usize, 3usize] {
             let frame = output
                 .frames
@@ -1434,12 +1595,26 @@
                         frame_idx
                     ))
                 })?;
-            assert!(
-                frame.objects.is_empty(),
-                "expected no visible objects on frame {} for temporal disambiguation bundle, found {}",
-                frame_idx,
-                frame.objects.len()
-            );
+            if !frame.objects.is_empty() {
+                let dump = format_failure_dump(dump_video_failure_context(
+                    bundle,
+                    &format!("temporal_disambiguation_frame{frame_idx}_unexpected_objects"),
+                    &[frame],
+                    &[(
+                        frame_idx,
+                        load_reference_frame_object_ids(bundle, frame_idx)?,
+                    )],
+                    serde_json::json!({
+                        "actual_object_count": frame.objects.len(),
+                        "expected_object_count": 0,
+                    }),
+                ));
+                panic!(
+                        "expected no visible objects on frame {} for temporal disambiguation bundle, found {}; {dump}",
+                        frame_idx,
+                        frame.objects.len()
+                    );
+            }
         }
         Ok(())
     }
@@ -1447,8 +1622,7 @@
     #[test]
     fn video_propagation_matches_unconfirmed_producer_reference_bundle() -> Result<()> {
         let bundle = "reference_video_postprocess_unconfirmed_box_debug";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
@@ -1487,7 +1661,41 @@
             .map(|frame| frame.frame_idx)
             .collect::<Vec<_>>();
         let expected_non_empty = load_reference_frame_indices(bundle)?;
-        assert_eq!(actual_non_empty, expected_non_empty);
+        if actual_non_empty != expected_non_empty {
+            let actual_dump_frames = output
+                .frames
+                .iter()
+                .filter(|frame| !frame.objects.is_empty())
+                .take(5)
+                .collect::<Vec<_>>();
+            let mut expected_frame_obj_ids = Vec::new();
+            for frame in &actual_dump_frames {
+                expected_frame_obj_ids.push((
+                    frame.frame_idx,
+                    load_reference_frame_object_ids(bundle, frame.frame_idx)?,
+                ));
+            }
+            if expected_frame_obj_ids.is_empty() {
+                for frame_idx in expected_non_empty.iter().take(5) {
+                    expected_frame_obj_ids.push((
+                        *frame_idx,
+                        load_reference_frame_object_ids(bundle, *frame_idx)?,
+                    ));
+                }
+            }
+            let dump = format_failure_dump(dump_video_failure_context(
+                bundle,
+                "unconfirmed_producer_non_empty_frames",
+                &actual_dump_frames,
+                &expected_frame_obj_ids,
+                serde_json::json!({
+                    "actual_non_empty": actual_non_empty,
+                    "expected_non_empty": expected_non_empty,
+                    "dumped_actual_non_empty_frame_limit": 5,
+                }),
+            ));
+            panic!("unconfirmed-producer non-empty frame mismatch; {dump}");
+        }
         let session = predictor.parity_session(&session_id).ok_or_else(|| {
             candle::Error::Msg(format!("missing session {} after propagation", session_id))
         })?;
@@ -1539,8 +1747,7 @@
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
         let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
         for obj_id in load_reference_frame_object_ids(bundle, 0)? {
-            let (_boxes, _score, mask_path) =
-                load_reference_object_frame_output(bundle, 0, obj_id)?;
+            let (_boxes, _score, mask_path) = load_reference_object_frame_output(bundle, 0, obj_id)?;
             predictor.add_mask_prompt(
                 &session_id,
                 0,
@@ -1549,10 +1756,7 @@
             )?;
         }
         let visible_obj_ids_by_frame = load_reference_visible_obj_ids_by_frame(bundle)?;
-        let raw_outputs = visible_obj_ids_by_frame
-            .keys()
-            .copied()
-            .collect::<Vec<_>>();
+        let raw_outputs = visible_obj_ids_by_frame.keys().copied().collect::<Vec<_>>();
         let raw_outputs = raw_outputs
             .into_iter()
             .map(|frame_idx| {
@@ -1575,10 +1779,7 @@
                         })
                     })
                     .collect::<Result<Vec<_>>>()?;
-                Ok(VideoFrameOutput {
-                    frame_idx,
-                    objects,
-                })
+                Ok(VideoFrameOutput { frame_idx, objects })
             })
             .collect::<Result<Vec<_>>>()?;
         let matched_obj_ids_by_frame = visible_obj_ids_by_frame
@@ -1624,8 +1825,7 @@
     #[test]
     fn video_propagation_can_start_from_first_annotation_reference_bundle() -> Result<()> {
         let bundle = "reference_video_start_from_first_ann_debug";
-        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))?
-        else {
+        let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
         let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
@@ -1681,9 +1881,9 @@
             );
             let actual_score = actual.parity_score_value()?;
             assert!(
-                (actual_score - expected_score).abs() <= 0.03,
-                "start-from-first-ann frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
-            );
+                    (actual_score - expected_score).abs() <= 0.03,
+                    "start-from-first-ann frame {frame_idx} score mismatch: actual={actual_score}, expected={expected_score}"
+                );
             let mask_iou = binary_mask_iou(&actual.masks, &expected_mask_path)?;
             assert!(
                 mask_iou >= 0.95,
