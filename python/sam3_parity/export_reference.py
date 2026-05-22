@@ -2990,7 +2990,11 @@ def main():
         frames_dir = output_dir / "frames"
         masks_dir = output_dir / "masks"
         masked_frames_dir = output_dir / "masked_frames"
+        tracker_frames_dir = output_dir / "tracker_input_frames"
         debug_dir = output_dir / "debug"
+        for generated_dir in (masks_dir, masked_frames_dir, tracker_frames_dir):
+            if generated_dir.exists():
+                shutil.rmtree(generated_dir)
         masks_dir.mkdir(parents=True, exist_ok=True)
         masked_frames_dir.mkdir(parents=True, exist_ok=True)
         if args.video_debug_bundle:

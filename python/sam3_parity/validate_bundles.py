@@ -17,6 +17,8 @@ except ModuleNotFoundError:
 INFORMATIONAL_PATH_KEYS = {
     "bpe_path",
     "checkpoint_path",
+    "module_file",
+    "package_dir",
     "replay_script_path",
     "source_path",
     "tokenizer_path",
