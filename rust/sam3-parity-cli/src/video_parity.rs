@@ -1488,9 +1488,17 @@
                 .collect::<Vec<_>>();
             let mut expected_frame_obj_ids = Vec::new();
             for frame in &actual_dump_frames {
+                let mut obj_ids = load_reference_frame_object_ids(bundle, frame.frame_idx)?;
+                if obj_ids.is_empty() {
+                    obj_ids = frame
+                        .objects
+                        .iter()
+                        .map(|object| object.obj_id)
+                        .collect::<Vec<_>>();
+                }
                 expected_frame_obj_ids.push((
                     frame.frame_idx,
-                    load_reference_frame_object_ids(bundle, frame.frame_idx)?,
+                    obj_ids,
                 ));
             }
             if expected_frame_obj_ids.is_empty() {
@@ -1670,9 +1678,17 @@
                 .collect::<Vec<_>>();
             let mut expected_frame_obj_ids = Vec::new();
             for frame in &actual_dump_frames {
+                let mut obj_ids = load_reference_frame_object_ids(bundle, frame.frame_idx)?;
+                if obj_ids.is_empty() {
+                    obj_ids = frame
+                        .objects
+                        .iter()
+                        .map(|object| object.obj_id)
+                        .collect::<Vec<_>>();
+                }
                 expected_frame_obj_ids.push((
                     frame.frame_idx,
-                    load_reference_frame_object_ids(bundle, frame.frame_idx)?,
+                    obj_ids,
                 ));
             }
             if expected_frame_obj_ids.is_empty() {

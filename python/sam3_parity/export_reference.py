@@ -588,7 +588,7 @@ def upsample_mask_to_original(mask_logits, image_size, image_size_hw):
             mode="bilinear",
             align_corners=False,
         )[0, 0]
-    ).detach().cpu().numpy()
+    ).detach().float().cpu().numpy()
     image = Image.fromarray((probs.clip(0.0, 1.0) * 255.0).round().astype("uint8"), mode="L")
     return image.resize((orig_w, orig_h), Image.Resampling.BILINEAR), probs
 

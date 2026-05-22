@@ -9,7 +9,7 @@ mod tests {
     use candle::Tensor;
     use candle_nn::VarBuilder;
     use candle_transformers::models::sam3::parity_support::ParityTemporalDisambiguationFrameMetadata;
-    use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage};
+    use image::{GrayImage, ImageBuffer, Luma, Rgb, RgbImage, Rgba, RgbaImage};
 
     const VIDEO_DEBUG_MASK_THRESHOLD: f32 = 0.5;
 
@@ -441,9 +441,7 @@ mod tests {
             .collect())
     }
 
-    fn load_reference_visible_obj_ids_by_frame(
-        bundle: &str,
-    ) -> Result<BTreeMap<usize, Vec<u32>>> {
+    fn load_reference_visible_obj_ids_by_frame(bundle: &str) -> Result<BTreeMap<usize, Vec<u32>>> {
         let bundle_dir = reference_bundle_dir(bundle);
         let value: serde_json::Value =
             serde_json::from_slice(&fs::read(bundle_dir.join("video_results.json"))?)
@@ -738,15 +736,17 @@ mod tests {
             .get("max_point_num_in_prompt_enc")
             .and_then(|value| value.as_u64())
         {
-            predictor.parity_video_config_mut().max_point_num_in_prompt_enc =
-                max_point_num as usize;
+            predictor
+                .parity_video_config_mut()
+                .max_point_num_in_prompt_enc = max_point_num as usize;
         }
         if let Some(non_overlap_masks_for_output) = predictor_config
             .get("non_overlap_masks_for_output")
             .and_then(|value| value.as_bool())
         {
-            predictor.parity_video_config_mut().non_overlap_masks_for_output =
-                non_overlap_masks_for_output;
+            predictor
+                .parity_video_config_mut()
+                .non_overlap_masks_for_output = non_overlap_masks_for_output;
         }
         if let Some(hotstart_delay) = predictor_config
             .get("hotstart_delay")
@@ -773,13 +773,17 @@ mod tests {
             .get("score_threshold_detection")
             .and_then(|value| value.as_f64())
         {
-            predictor.parity_video_config_mut().score_threshold_detection = threshold as f32;
+            predictor
+                .parity_video_config_mut()
+                .score_threshold_detection = threshold as f32;
         }
         if let Some(value) = scenario_predictor_overrides
             .get("suppress_unmatched_only_within_hotstart")
             .and_then(|value| value.as_bool())
         {
-            predictor.parity_video_config_mut().suppress_unmatched_only_within_hotstart = value;
+            predictor
+                .parity_video_config_mut()
+                .suppress_unmatched_only_within_hotstart = value;
         }
         if let Some(value) = scenario_predictor_overrides
             .get("init_trk_keep_alive")
@@ -803,8 +807,9 @@ mod tests {
             .get("decrease_trk_keep_alive_for_empty_masklets")
             .and_then(|value| value.as_bool())
         {
-            predictor.parity_video_config_mut().decrease_trk_keep_alive_for_empty_masklets =
-                value;
+            predictor
+                .parity_video_config_mut()
+                .decrease_trk_keep_alive_for_empty_masklets = value;
         }
         Ok(())
     }
@@ -1075,7 +1080,8 @@ mod tests {
         bundle: &str,
         frame_idx: usize,
     ) -> Result<Vec<(u32, Tensor)>> {
-        let record = load_reference_internal_record(bundle, "run_single_frame_inference", frame_idx)?;
+        let record =
+            load_reference_internal_record(bundle, "run_single_frame_inference", frame_idx)?;
         let tensor_keys = record["tensor_keys"].as_object().ok_or_else(|| {
             candle::Error::Msg(format!(
                 "reference run_single_frame_inference frame {} missing tensor_keys",
@@ -1090,7 +1096,10 @@ mod tests {
                     .and_then(|obj_id| value.as_str().map(|tensor_key| (obj_id, tensor_key)))
             })
             .map(|(obj_id, tensor_key)| {
-                Ok((obj_id, load_reference_internal_tensor_allow_bool(bundle, tensor_key)?))
+                Ok((
+                    obj_id,
+                    load_reference_internal_tensor_allow_bool(bundle, tensor_key)?,
+                ))
             })
             .collect::<Result<Vec<_>>>()?;
         outputs.sort_by_key(|(obj_id, _)| *obj_id);
@@ -1286,6 +1295,432 @@ mod tests {
         mask_tensor_to_binary_image(mask)?
             .save(path)
             .map_err(|err| candle::Error::Msg(format!("failed to save {}: {err}", path.display())))
+    }
+
+    fn reference_input_frame_path(bundle: &str, frame_idx: usize) -> Option<PathBuf> {
+        let frame_dir = reference_input_frames_dir(bundle);
+        [
+            format!("{frame_idx:06}.png"),
+            format!("{frame_idx:06}.jpg"),
+            format!("{frame_idx:06}.jpeg"),
+            format!("{frame_idx:05}.png"),
+            format!("{frame_idx:05}.jpg"),
+            format!("{frame_idx:05}.jpeg"),
+            format!("frame_{frame_idx:06}.png"),
+            format!("frame_{frame_idx:06}.jpg"),
+            format!("frame_{frame_idx:06}.jpeg"),
+        ]
+        .into_iter()
+        .map(|name| frame_dir.join(name))
+        .find(|path| path.exists())
+    }
+
+    fn reference_masked_frame_path_from_mask(mask_path: &Path) -> Option<PathBuf> {
+        let file_name = mask_path.file_name()?;
+        let bundle_dir = mask_path.parent()?.parent()?;
+        Some(bundle_dir.join("masked_frames").join(file_name))
+    }
+
+    fn copy_file_if_exists(src: &Path, dest: &Path) -> Result<Option<String>> {
+        if !src.exists() {
+            return Ok(None);
+        }
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(|err| {
+                candle::Error::Msg(format!(
+                    "failed to create directory {}: {err}",
+                    parent.display()
+                ))
+            })?;
+        }
+        fs::copy(src, dest).map_err(|err| {
+            candle::Error::Msg(format!(
+                "failed to copy {} to {}: {err}",
+                src.display(),
+                dest.display()
+            ))
+        })?;
+        Ok(Some(dest.display().to_string()))
+    }
+
+    fn put_pixel_if_in_bounds(image: &mut RgbaImage, x: i32, y: i32, color: Rgba<u8>) {
+        if x >= 0 && y >= 0 && (x as u32) < image.width() && (y as u32) < image.height() {
+            image.put_pixel(x as u32, y as u32, color);
+        }
+    }
+
+    fn draw_normalized_box_outline(image: &mut RgbaImage, box_xyxy: &[f32], color: Rgba<u8>) {
+        if box_xyxy.len() < 4 || image.width() == 0 || image.height() == 0 {
+            return;
+        }
+        let x_scale = image.width().saturating_sub(1) as f32;
+        let y_scale = image.height().saturating_sub(1) as f32;
+        let x0 = (box_xyxy[0].clamp(0.0, 1.0) * x_scale).round() as i32;
+        let y0 = (box_xyxy[1].clamp(0.0, 1.0) * y_scale).round() as i32;
+        let x1 = (box_xyxy[2].clamp(0.0, 1.0) * x_scale).round() as i32;
+        let y1 = (box_xyxy[3].clamp(0.0, 1.0) * y_scale).round() as i32;
+        let (left, right) = (x0.min(x1), x0.max(x1));
+        let (top, bottom) = (y0.min(y1), y0.max(y1));
+        for thickness in 0..2 {
+            for x in left..=right {
+                put_pixel_if_in_bounds(image, x, top + thickness, color);
+                put_pixel_if_in_bounds(image, x, bottom - thickness, color);
+            }
+            for y in top..=bottom {
+                put_pixel_if_in_bounds(image, left + thickness, y, color);
+                put_pixel_if_in_bounds(image, right - thickness, y, color);
+            }
+        }
+    }
+
+    fn save_actual_masked_frame_png(
+        path: &Path,
+        source_frame_path: &Path,
+        object: &ObjectFrameOutput,
+    ) -> Result<()> {
+        let mask_probs = tensor_to_mask_probs_2d(&object.masks)?;
+        let mask_height = mask_probs.len() as u32;
+        let mask_width = mask_probs.first().map(Vec::len).unwrap_or(0) as u32;
+        let mut image = image::open(source_frame_path)
+            .map_err(|err| {
+                candle::Error::Msg(format!(
+                    "failed to open source frame {}: {err}",
+                    source_frame_path.display()
+                ))
+            })?
+            .to_rgba8();
+        if image.width() != mask_width || image.height() != mask_height {
+            candle::bail!(
+                "source frame {} size {}x{} does not match mask size {}x{}",
+                source_frame_path.display(),
+                image.width(),
+                image.height(),
+                mask_width,
+                mask_height
+            );
+        }
+        crate::blend_mask_with_threshold(
+            &mut image,
+            &mask_probs,
+            [56, 201, 84],
+            VIDEO_DEBUG_MASK_THRESHOLD,
+        );
+        let boxes = object
+            .boxes_xyxy
+            .to_dtype(DType::F32)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        for box_xyxy in boxes.chunks_exact(4) {
+            draw_normalized_box_outline(&mut image, box_xyxy, Rgba([255, 80, 80, 255]));
+        }
+        image
+            .save(path)
+            .map_err(|err| candle::Error::Msg(format!("failed to save {}: {err}", path.display())))
+    }
+
+    fn save_side_by_side_png(left: &Path, right: &Path, dest: &Path) -> Result<()> {
+        let left_image = image::open(left)
+            .map_err(|err| {
+                candle::Error::Msg(format!(
+                    "failed to open {} for comparison: {err}",
+                    left.display()
+                ))
+            })?
+            .to_rgba8();
+        let right_image = image::open(right)
+            .map_err(|err| {
+                candle::Error::Msg(format!(
+                    "failed to open {} for comparison: {err}",
+                    right.display()
+                ))
+            })?
+            .to_rgba8();
+        let width = left_image.width() + right_image.width();
+        let height = left_image.height().max(right_image.height());
+        let mut comparison = ImageBuffer::from_pixel(width, height, Rgba([255, 255, 255, 255]));
+        image::imageops::overlay(&mut comparison, &left_image, 0, 0);
+        image::imageops::overlay(&mut comparison, &right_image, left_image.width() as i64, 0);
+        comparison
+            .save(dest)
+            .map_err(|err| candle::Error::Msg(format!("failed to save {}: {err}", dest.display())))
+    }
+
+    fn actual_object_stems_for_frame(
+        actual_frames: &[&VideoFrameOutput],
+        frame_idx: usize,
+    ) -> Vec<String> {
+        actual_frames
+            .iter()
+            .filter(|frame| frame.frame_idx == frame_idx)
+            .flat_map(|frame| {
+                frame
+                    .objects
+                    .iter()
+                    .map(move |object| format!("frame_{frame_idx:06}_obj_{:06}", object.obj_id))
+            })
+            .collect()
+    }
+
+    fn comparison_name(expected_stem: &str, actual_stem: &str, suffix: &str) -> String {
+        if expected_stem == actual_stem {
+            format!("{expected_stem}_{suffix}_reference_actual.png")
+        } else {
+            format!("{expected_stem}_reference_vs_{actual_stem}_{suffix}.png")
+        }
+    }
+
+    fn dump_video_failure_context(
+        bundle: &str,
+        label: &str,
+        actual_frames: &[&VideoFrameOutput],
+        expected_frame_obj_ids: &[(usize, Vec<u32>)],
+        details: serde_json::Value,
+    ) -> Result<PathBuf> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| candle::Error::Msg(format!("time went backwards: {err}")))?
+            .as_millis();
+        let out_dir = PathBuf::from("/tmp/sam3_test_failures")
+            .join(format!("{}_{}_{}", bundle, label, stamp));
+        let actual_dir = out_dir.join("actual");
+        let reference_dir = out_dir.join("reference");
+        let comparison_dir = out_dir.join("comparison");
+        let source_dir = out_dir.join("source_frames");
+        for dir in [&actual_dir, &reference_dir, &comparison_dir, &source_dir] {
+            fs::create_dir_all(dir).map_err(|err| {
+                candle::Error::Msg(format!("failed to create {}: {err}", dir.display()))
+            })?;
+        }
+
+        let mut actual_summary = Vec::new();
+        for frame in actual_frames {
+            let source_frame_path = reference_input_frame_path(bundle, frame.frame_idx);
+            if let Some(source_frame_path) = source_frame_path.as_ref() {
+                let dest = source_dir.join(format!("frame_{:06}.png", frame.frame_idx));
+                copy_file_if_exists(source_frame_path, &dest)?;
+            }
+            for object in &frame.objects {
+                let stem = format!("frame_{:06}_obj_{:06}", frame.frame_idx, object.obj_id);
+                let actual_mask_path = actual_dir.join(format!("{stem}_mask.png"));
+                save_binary_mask_png(&actual_mask_path, &object.masks)?;
+                let actual_masked_frame_path =
+                    if let Some(source_frame_path) = source_frame_path.as_ref() {
+                        let path = actual_dir.join(format!("{stem}_masked_frame.png"));
+                        save_actual_masked_frame_png(&path, source_frame_path, object)?;
+                        Some(path)
+                    } else {
+                        None
+                    };
+                actual_summary.push(serde_json::json!({
+                    "frame_idx": frame.frame_idx,
+                    "obj_id": object.obj_id,
+                    "boxes_xyxy": object.boxes_xyxy.flatten_all()?.to_vec1::<f32>()?,
+                    "score": object.parity_score_value()?,
+                    "presence_score": maybe_single_tensor_value(object.presence_scores.as_ref())?,
+                    "prompt_frame_idx": object.prompt_frame_idx,
+                    "memory_frame_indices": object.memory_frame_indices,
+                    "used_explicit_geometry": object.used_explicit_geometry,
+                    "reused_previous_output": object.reused_previous_output,
+                    "mask_path": actual_mask_path.display().to_string(),
+                    "masked_frame_path": actual_masked_frame_path
+                        .as_ref()
+                        .map(|path| path.display().to_string()),
+                }));
+            }
+        }
+
+        let mut reference_summary = Vec::new();
+        for (frame_idx, obj_ids) in expected_frame_obj_ids {
+            for obj_id in obj_ids {
+                let stem = format!("frame_{frame_idx:06}_obj_{obj_id:06}");
+                match load_reference_object_frame_output(bundle, *frame_idx, *obj_id) {
+                    Ok((boxes, score, mask_path)) => {
+                        let expected_mask_path = reference_dir.join(format!("{stem}_mask.png"));
+                        copy_file_if_exists(&mask_path, &expected_mask_path)?;
+                        let expected_masked_frame_path = if let Some(masked_frame_path) =
+                            reference_masked_frame_path_from_mask(&mask_path)
+                        {
+                            let dest = reference_dir.join(format!("{stem}_masked_frame.png"));
+                            copy_file_if_exists(&masked_frame_path, &dest)?;
+                            Some(dest)
+                        } else {
+                            None
+                        };
+
+                        let actual_mask_path = actual_dir.join(format!("{stem}_mask.png"));
+                        if actual_mask_path.exists() && expected_mask_path.exists() {
+                            save_side_by_side_png(
+                                &expected_mask_path,
+                                &actual_mask_path,
+                                &comparison_dir.join(format!("{stem}_mask_reference_actual.png")),
+                            )?;
+                        } else if expected_mask_path.exists() {
+                            for actual_stem in
+                                actual_object_stems_for_frame(actual_frames, *frame_idx)
+                            {
+                                let actual_mask_path =
+                                    actual_dir.join(format!("{actual_stem}_mask.png"));
+                                if actual_mask_path.exists() {
+                                    save_side_by_side_png(
+                                        &expected_mask_path,
+                                        &actual_mask_path,
+                                        &comparison_dir.join(comparison_name(
+                                            &stem,
+                                            &actual_stem,
+                                            "mask",
+                                        )),
+                                    )?;
+                                }
+                            }
+                        }
+                        if let Some(expected_masked_frame_path) =
+                            expected_masked_frame_path.as_ref()
+                        {
+                            let actual_masked_frame_path =
+                                actual_dir.join(format!("{stem}_masked_frame.png"));
+                            if actual_masked_frame_path.exists()
+                                && expected_masked_frame_path.exists()
+                            {
+                                save_side_by_side_png(
+                                    expected_masked_frame_path,
+                                    &actual_masked_frame_path,
+                                    &comparison_dir
+                                        .join(format!("{stem}_masked_frame_reference_actual.png")),
+                                )?;
+                            } else {
+                                for actual_stem in
+                                    actual_object_stems_for_frame(actual_frames, *frame_idx)
+                                {
+                                    let actual_masked_frame_path =
+                                        actual_dir.join(format!("{actual_stem}_masked_frame.png"));
+                                    if actual_masked_frame_path.exists() {
+                                        save_side_by_side_png(
+                                            expected_masked_frame_path,
+                                            &actual_masked_frame_path,
+                                            &comparison_dir.join(comparison_name(
+                                                &stem,
+                                                &actual_stem,
+                                                "masked_frame",
+                                            )),
+                                        )?;
+                                    }
+                                }
+                            }
+                        }
+
+                        reference_summary.push(serde_json::json!({
+                            "frame_idx": frame_idx,
+                            "obj_id": obj_id,
+                            "boxes_xyxy": boxes,
+                            "score": score,
+                            "mask_path": expected_mask_path.display().to_string(),
+                            "masked_frame_path": expected_masked_frame_path
+                                .as_ref()
+                                .map(|path| path.display().to_string()),
+                        }));
+                    }
+                    Err(err) => {
+                        let hidden_mask_path = reference_bundle_dir(bundle)
+                            .join("masks")
+                            .join(format!("{stem}.png"));
+                        if hidden_mask_path.exists() {
+                            let expected_mask_path = reference_dir.join(format!("{stem}_mask.png"));
+                            copy_file_if_exists(&hidden_mask_path, &expected_mask_path)?;
+                            let expected_masked_frame_path = if let Some(masked_frame_path) =
+                                reference_masked_frame_path_from_mask(&hidden_mask_path)
+                            {
+                                let dest = reference_dir.join(format!("{stem}_masked_frame.png"));
+                                copy_file_if_exists(&masked_frame_path, &dest)?;
+                                Some(dest)
+                            } else {
+                                None
+                            };
+                            for actual_stem in
+                                actual_object_stems_for_frame(actual_frames, *frame_idx)
+                            {
+                                let actual_mask_path =
+                                    actual_dir.join(format!("{actual_stem}_mask.png"));
+                                if actual_mask_path.exists() {
+                                    save_side_by_side_png(
+                                        &expected_mask_path,
+                                        &actual_mask_path,
+                                        &comparison_dir.join(comparison_name(
+                                            &stem,
+                                            &actual_stem,
+                                            "mask",
+                                        )),
+                                    )?;
+                                }
+                                if let Some(expected_masked_frame_path) =
+                                    expected_masked_frame_path.as_ref()
+                                {
+                                    let actual_masked_frame_path =
+                                        actual_dir.join(format!("{actual_stem}_masked_frame.png"));
+                                    if actual_masked_frame_path.exists() {
+                                        save_side_by_side_png(
+                                            expected_masked_frame_path,
+                                            &actual_masked_frame_path,
+                                            &comparison_dir.join(comparison_name(
+                                                &stem,
+                                                &actual_stem,
+                                                "masked_frame",
+                                            )),
+                                        )?;
+                                    }
+                                }
+                            }
+                            reference_summary.push(serde_json::json!({
+                                "frame_idx": frame_idx,
+                                "obj_id": obj_id,
+                                "visible_reference_record": false,
+                                "mask_path": expected_mask_path.display().to_string(),
+                                "masked_frame_path": expected_masked_frame_path
+                                    .as_ref()
+                                    .map(|path| path.display().to_string()),
+                                "hidden_reference_note": "reference PNG existed even though video_results.json listed no visible object",
+                            }));
+                        } else {
+                            reference_summary.push(serde_json::json!({
+                                "frame_idx": frame_idx,
+                                "obj_id": obj_id,
+                                "missing_reference": err.to_string(),
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+
+        let summary = serde_json::json!({
+            "bundle": bundle,
+            "label": label,
+            "details": details,
+            "actual": actual_summary,
+            "reference": reference_summary,
+            "comparison_note": "comparison PNGs place reference on the left and actual on the right",
+            "provenance_note": "`actual` and `reference` identify Candle output versus the upstream bundle; they do not imply which output is visually more accurate",
+        });
+        fs::write(
+            out_dir.join("summary.json"),
+            serde_json::to_vec_pretty(&summary)
+                .map_err(|err| candle::Error::Msg(format!("failed to serialize summary: {err}")))?,
+        )
+        .map_err(|err| {
+            candle::Error::Msg(format!(
+                "failed to write video failure summary in {}: {err}",
+                out_dir.display()
+            ))
+        })?;
+        Ok(out_dir)
+    }
+
+    fn format_failure_dump(result: Result<PathBuf>) -> String {
+        match result {
+            Ok(path) => format!("failure dump: {}", path.display()),
+            Err(err) => format!("failure dump failed: {err}"),
+        }
     }
 
     fn maybe_tensor_shape(tensor: Option<&Tensor>) -> Option<Vec<usize>> {
