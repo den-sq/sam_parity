@@ -1465,13 +1465,8 @@
             true,
             true,
         )?;
-        let output = predictor.propagate_in_video(
-            &session_id,
-            PropagationOptions {
-                max_frame_num_to_track: Some(4),
-                ..PropagationOptions::default()
-            },
-        )?;
+        let output = predictor
+            .propagate_in_video(&session_id, load_reference_propagation_options(bundle)?)?;
         let actual_non_empty = output
             .frames
             .iter()

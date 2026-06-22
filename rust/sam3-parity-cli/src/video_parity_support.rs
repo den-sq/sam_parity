@@ -477,6 +477,42 @@ mod tests {
             .unwrap_or_default())
     }
 
+    fn load_reference_propagation_options(bundle: &str) -> Result<PropagationOptions> {
+        let bundle_dir = reference_bundle_dir(bundle);
+        let value: serde_json::Value =
+            serde_json::from_slice(&fs::read(bundle_dir.join("reference.json"))?)
+                .map_err(|err| candle::Error::Msg(err.to_string()))?;
+        let actions = value["scenario"]["actions"].as_array().ok_or_else(|| {
+            candle::Error::Msg("reference bundle missing scenario actions".to_owned())
+        })?;
+        let action = actions
+            .iter()
+            .find(|action| action["type"].as_str() == Some("propagate"))
+            .ok_or_else(|| {
+                candle::Error::Msg("reference bundle missing propagate action".to_owned())
+            })?;
+        let direction = match action["direction"].as_str().unwrap_or("forward") {
+            "forward" => PropagationDirection::Forward,
+            "backward" => PropagationDirection::Backward,
+            "both" => PropagationDirection::Both,
+            direction => {
+                candle::bail!("reference propagate action has unsupported direction {direction}")
+            }
+        };
+        Ok(PropagationOptions {
+            direction,
+            start_frame_idx: action["start_frame_idx"]
+                .as_u64()
+                .map(|value| value as usize),
+            max_frame_num_to_track: action["max_frame_num_to_track"]
+                .as_u64()
+                .map(|value| value as usize),
+            output_prob_threshold: action["output_prob_threshold"]
+                .as_f64()
+                .map(|value| value as f32),
+        })
+    }
+
     fn load_reference_frame0_output(bundle: &str) -> Result<(Vec<f32>, f32, PathBuf)> {
         load_reference_frame_output(bundle, 0)
     }
