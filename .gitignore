@@ -197,6 +197,11 @@ cython_debug/
 # Local SAM3 downloads
 chkpts/
 
+# Local parity run artifacts
+.codex
+sam_parity_full_all.txt
+sam_parity_full_all_error.txt
+
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
