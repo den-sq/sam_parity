@@ -11,7 +11,7 @@
     {
       "type": "add_prompt",
       "frame_idx": 0,
-      "boxes_xywh": [[0.43, 0.44, 0.28, 0.52]],
+      "boxes_xywh": [[0.57, 0.70, 0.28, 0.52]],
       "box_labels": [1]
     },
     {
