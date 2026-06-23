@@ -10,6 +10,8 @@ jobs:
     runs-on: [self-hosted, linux, x64, gpu]
     steps:
       - uses: actions/checkout@v6
+      - name: Clone Candle SAM3 path dependency
+        run: git clone --depth 1 https://github.com/den-sq/candle_sam3 ../candle_sam3
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v6
         with:
