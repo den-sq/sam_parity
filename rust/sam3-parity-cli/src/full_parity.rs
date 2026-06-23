@@ -8,12 +8,13 @@ use crate::paths;
 #[test]
 fn full_parity_matrix_artifact_dirs_are_portable() -> Result<()> {
     let matrix_path = paths::repo_root().join("docs/video_tracker_strict_port_matrix.json");
-    let matrix: Value = serde_json::from_str(&fs::read_to_string(&matrix_path).with_context(|| {
-        format!(
-            "failed to read video strict-port matrix from {}",
-            matrix_path.display()
-        )
-    })?)?;
+    let matrix: Value =
+        serde_json::from_str(&fs::read_to_string(&matrix_path).with_context(|| {
+            format!(
+                "failed to read video strict-port matrix from {}",
+                matrix_path.display()
+            )
+        })?)?;
     let bundles = matrix
         .get("bundles")
         .and_then(Value::as_array)
@@ -82,9 +83,7 @@ fn full_parity_generated_bundles_have_expected_layout_when_present() -> Result<(
         ] {
             let path = bundle_dir.join(relative);
             if !path.exists() {
-                bail!(
-                    "generated bundle {artifact_dir} is missing expected artifact {relative}"
-                );
+                bail!("generated bundle {artifact_dir} is missing expected artifact {relative}");
             }
         }
     }
@@ -110,7 +109,10 @@ fn extracted_tracker_and_video_parity_sources_are_preserved() -> Result<()> {
             continue;
         }
         if !text.contains("#[test]") {
-            bail!("{} no longer contains extracted test functions", path.display());
+            bail!(
+                "{} no longer contains extracted test functions",
+                path.display()
+            );
         }
     }
     Ok(())

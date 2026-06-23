@@ -99,4 +99,3 @@ pub struct VideoExportMetadata {
 fn default_bundle_version() -> usize {
     1
 }
-

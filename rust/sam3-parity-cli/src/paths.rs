@@ -46,10 +46,7 @@ pub(crate) fn resolve_data_dir(name: &str) -> PathBuf {
 }
 
 pub(crate) fn example_asset(relative: &str) -> String {
-    repo_root()
-        .join(relative)
-        .to_string_lossy()
-        .into_owned()
+    repo_root().join(relative).to_string_lossy().into_owned()
 }
 
 pub(crate) fn resolve_metadata_path(bundle_root: &Path, value: &str) -> PathBuf {

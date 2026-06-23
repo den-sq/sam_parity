@@ -11,4 +11,3 @@ pub struct TensorComparisonReport {
     pub pass: bool,
     pub note: Option<String>,
 }
-

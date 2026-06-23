@@ -10,7 +10,9 @@ fn main() -> Result<()> {
     let checkpoint_path = resolve_checkpoint_path();
     let actual_path = std::env::var("SAM3_BLOCK7_ACTUAL_PATH")
         .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from("/tmp/parity_box_positive_debug_b7_report/actual.safetensors"));
+        .unwrap_or_else(|_| {
+            PathBuf::from("/tmp/parity_box_positive_debug_b7_report/actual.safetensors")
+        });
     let output_path = std::env::var("SAM3_BLOCK7_PROBE_OUT")
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("/tmp/sam3_block7_attention_probe.safetensors"));
@@ -18,7 +20,12 @@ fn main() -> Result<()> {
     let actual = candle::safetensors::load(&actual_path, &device)?;
     let input = actual
         .get("vision.block_debug.7.input")
-        .ok_or_else(|| candle::Error::Msg(format!("missing vision.block_debug.7.input in {}", actual_path.display())))?
+        .ok_or_else(|| {
+            candle::Error::Msg(format!(
+                "missing vision.block_debug.7.input in {}",
+                actual_path.display()
+            ))
+        })?
         .permute((0, 2, 3, 1))?
         .contiguous()?;
 
@@ -80,7 +87,10 @@ fn main() -> Result<()> {
     let v = qkv_out.i(2)?.contiguous()?;
     let (q_rope, k_rope) = rotary.apply(&q, &k)?;
     let scale = Tensor::new((head_dim as f32).powf(-0.5), &device)?;
-    let q_scaled = q_rope.to_dtype(DType::F32)?.broadcast_mul(&scale)?.contiguous()?;
+    let q_scaled = q_rope
+        .to_dtype(DType::F32)?
+        .broadcast_mul(&scale)?
+        .contiguous()?;
     let k_f32 = k_rope.to_dtype(DType::F32)?.contiguous()?;
     let v_f32 = v.to_dtype(DType::F32)?.contiguous()?;
     let attn_scores = q_scaled.matmul(&k_f32.transpose(2, 3)?)?;
@@ -93,7 +103,10 @@ fn main() -> Result<()> {
     let v_f64 = v_f32.to_dtype(DType::F64)?;
     let attn_scores_f64 = q_scaled_f64.matmul(&k_f64.transpose(2, 3)?)?;
     let attn_probs_f64 = candle_nn::ops::softmax_last_dim(&attn_scores_f64)?;
-    let context_f64 = attn_probs_f64.matmul(&v_f64)?.to_dtype(DType::F32)?.contiguous()?;
+    let context_f64 = attn_probs_f64
+        .matmul(&v_f64)?
+        .to_dtype(DType::F32)?
+        .contiguous()?;
     let attn_nhwc = context
         .to_dtype(DType::F32)?
         .transpose(1, 2)?
@@ -115,9 +128,15 @@ fn main() -> Result<()> {
     let hot_h = 19usize;
     let hot_w = 55usize;
     let hot_seq = hot_h * width + hot_w;
-    let hot_scores = attn_scores.i((.., .., hot_seq..hot_seq + 1, ..))?.contiguous()?;
-    let hot_probs = attn_probs.i((.., .., hot_seq..hot_seq + 1, ..))?.contiguous()?;
-    let hot_context = context.i((.., .., hot_seq..hot_seq + 1, ..))?.contiguous()?;
+    let hot_scores = attn_scores
+        .i((.., .., hot_seq..hot_seq + 1, ..))?
+        .contiguous()?;
+    let hot_probs = attn_probs
+        .i((.., .., hot_seq..hot_seq + 1, ..))?
+        .contiguous()?;
+    let hot_context = context
+        .i((.., .., hot_seq..hot_seq + 1, ..))?
+        .contiguous()?;
     let focus_seq = 31usize * width + 57usize;
     let focus_scores = attn_scores
         .i((.., .., focus_seq..focus_seq + 1, ..))?
@@ -129,7 +148,9 @@ fn main() -> Result<()> {
         .i((.., .., focus_seq..focus_seq + 1, ..))?
         .contiguous()?;
     let focus_scores_max = focus_scores.max_keepdim(D::Minus1)?.contiguous()?;
-    let focus_scores_diff = focus_scores.broadcast_sub(&focus_scores_max)?.contiguous()?;
+    let focus_scores_diff = focus_scores
+        .broadcast_sub(&focus_scores_max)?
+        .contiguous()?;
     let focus_scores_exp = focus_scores_diff.exp()?.contiguous()?;
     let focus_scores_exp_sum = focus_scores_exp.sum_keepdim(D::Minus1)?.contiguous()?;
     let focus_probs_generic = attn_probs_generic
@@ -160,19 +181,37 @@ fn main() -> Result<()> {
     tensors.insert("block7.attn.context_hot".to_owned(), hot_context);
     tensors.insert("block7.attn.scores_focus".to_owned(), focus_scores);
     tensors.insert("block7.attn.scores_focus_max".to_owned(), focus_scores_max);
-    tensors.insert("block7.attn.scores_focus_diff".to_owned(), focus_scores_diff);
+    tensors.insert(
+        "block7.attn.scores_focus_diff".to_owned(),
+        focus_scores_diff,
+    );
     tensors.insert("block7.attn.scores_focus_exp".to_owned(), focus_scores_exp);
-    tensors.insert("block7.attn.scores_focus_exp_sum".to_owned(), focus_scores_exp_sum);
+    tensors.insert(
+        "block7.attn.scores_focus_exp_sum".to_owned(),
+        focus_scores_exp_sum,
+    );
     tensors.insert("block7.attn.probs_focus".to_owned(), focus_probs);
     tensors.insert("block7.attn.context_focus".to_owned(), focus_context);
-    tensors.insert("block7.attn.probs_focus_generic".to_owned(), focus_probs_generic);
-    tensors.insert("block7.attn.context_focus_generic".to_owned(), focus_context_generic);
+    tensors.insert(
+        "block7.attn.probs_focus_generic".to_owned(),
+        focus_probs_generic,
+    );
+    tensors.insert(
+        "block7.attn.context_focus_generic".to_owned(),
+        focus_context_generic,
+    );
     tensors.insert("block7.attn.probs_focus_f64".to_owned(), focus_probs_f64);
-    tensors.insert("block7.attn.context_focus_f64".to_owned(), focus_context_f64);
+    tensors.insert(
+        "block7.attn.context_focus_f64".to_owned(),
+        focus_context_f64,
+    );
     tensors.insert("block7.attn.context".to_owned(), context);
     tensors.insert("block7.attn.context_generic".to_owned(), context_generic);
     tensors.insert("block7.attn.context_f64".to_owned(), context_f64);
-    tensors.insert("block7.attn.output".to_owned(), attn_output.permute((0, 3, 1, 2))?);
+    tensors.insert(
+        "block7.attn.output".to_owned(),
+        attn_output.permute((0, 3, 1, 2))?,
+    );
     tensors.insert(
         "block7.attn.output_generic".to_owned(),
         attn_output_generic.permute((0, 3, 1, 2))?,
@@ -243,14 +282,14 @@ impl VisionRotaryEmbedding {
 
     fn apply(&self, q: &Tensor, k: &Tensor) -> Result<(Tensor, Tensor)> {
         let (_, _, seq_len, head_dim) = q.dims4()?;
-        let freqs_real = self
-            .freqs_real
-            .narrow(0, 0, seq_len)?
-            .reshape((1, 1, seq_len, head_dim / 2))?;
-        let freqs_imag = self
-            .freqs_imag
-            .narrow(0, 0, seq_len)?
-            .reshape((1, 1, seq_len, head_dim / 2))?;
+        let freqs_real =
+            self.freqs_real
+                .narrow(0, 0, seq_len)?
+                .reshape((1, 1, seq_len, head_dim / 2))?;
+        let freqs_imag =
+            self.freqs_imag
+                .narrow(0, 0, seq_len)?
+                .reshape((1, 1, seq_len, head_dim / 2))?;
         Ok((
             apply_rotary_enc_real(q, &freqs_real, &freqs_imag)?,
             apply_rotary_enc_real(k, &freqs_real, &freqs_imag)?,

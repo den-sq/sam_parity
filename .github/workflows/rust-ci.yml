@@ -12,6 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Clone Candle SAM3 path dependency
+        run: git clone --depth 1 https://github.com/den-sq/candle_sam3 ../candle_sam3
       - uses: Swatinem/rust-cache@v2
       - name: Cargo check
         run: cargo check --workspace
@@ -23,6 +25,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Clone Candle SAM3 path dependency
+        run: git clone --depth 1 https://github.com/den-sq/candle_sam3 ../candle_sam3
       - uses: Swatinem/rust-cache@v2
       - name: Cargo test
         run: cargo test --workspace
@@ -34,5 +38,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
+      - name: Clone Candle SAM3 path dependency
+        run: git clone --depth 1 https://github.com/den-sq/candle_sam3 ../candle_sam3
       - name: Rustfmt
-        run: cargo fmt --all -- --check
+        run: cargo fmt --package sam3-parity-lib --package sam3-parity-cli -- --check
