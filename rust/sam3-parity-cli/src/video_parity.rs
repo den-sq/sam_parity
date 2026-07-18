@@ -1767,11 +1767,15 @@
             )?;
         }
         let visible_obj_ids_by_frame = load_reference_visible_obj_ids_by_frame(bundle)?;
-        let raw_outputs = visible_obj_ids_by_frame.keys().copied().collect::<Vec<_>>();
-        let raw_outputs = raw_outputs
-            .into_iter()
-            .map(|frame_idx| {
-                let objects = load_reference_run_single_frame_masks(bundle, frame_idx)?
+        let raw_outputs = visible_obj_ids_by_frame
+            .iter()
+            .map(|(&frame_idx, visible_obj_ids)| {
+                let reference_masks = if visible_obj_ids.is_empty() {
+                    Vec::new()
+                } else {
+                    load_reference_run_single_frame_masks(bundle, frame_idx)?
+                };
+                let objects = reference_masks
                     .into_iter()
                     .map(|(obj_id, mask)| {
                         let mask = mask.to_device(device)?;
