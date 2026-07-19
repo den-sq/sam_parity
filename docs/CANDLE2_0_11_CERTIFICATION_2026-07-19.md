@@ -10,11 +10,17 @@ pass. The same-fork GitHub CUDA workflow cannot acquire its private upstream
 runner group, so target-hardware manual evidence is recorded instead.
 
 The integration is **not yet certified for merge** because the representative
-Medical-SAM3 point-prompt output does not match a newly exported result from the
-official Facebook tracker. The mismatch is inherited: both the pre-upgrade and
-Candle 0.11 outputs are far from the upstream output. It is therefore not a
-Candle 0.11 regression, but it requires a parity disposition or correction
-before issue #40 can be closed.
+Medical-SAM3 point-prompt output moves materially farther from a newly exported
+result from the official Facebook tracker. The pre-upgrade result has IoU
+`0.961942` against the official output; Candle 0.11 falls to `0.911318` and adds
+36,370 pixels relative to the control. This unexplained regression requires a
+parity disposition or correction before issue #40 can be closed.
+
+Correction: an earlier version of this report incorrectly staged the 16-bit
+TIFF for the official exporter using a direct Pillow RGB conversion, clipping
+the input frames to white. The results below supersede that invalid run. The
+corrected export uses the plugin's exact integer scaling, Rust `image` crate,
+RGB expansion, and JPEG encoder settings.
 
 ## Revisions and provenance
 
@@ -167,29 +173,31 @@ superset of the control, with IoU `0.927453409`.
 
 To distinguish an upgrade regression from inherited behavior, the official
 Facebook tracker was run on CUDA with the same checkpoint, 16-frame geometry,
-frame-0 positive point, and forward propagation. The source TIFF was staged as
-quality-90 grayscale-to-RGB JPEG frames, matching the plugin's documented
-staging contract. The direct tracker engine was used because that is the path
-corresponding to Candle's tracker point prompt.
+frame-0 positive point, and forward propagation. The 16-bit TIFF was staged
+exactly like the plugin: integer division by 255 with saturation to U8,
+grayscale-to-RGB expansion, then Rust `image` 0.25.10 JPEG encoding at quality
+90. The direct tracker engine was used because that is the path corresponding
+to Candle's tracker point prompt.
 
 | Result | Foreground pixels | IoU versus upstream |
 |---|---:|---:|
-| official Facebook tracker | 27,395 | 1.0 |
-| pre-upgrade Candle | 464,963 | 0.040475 |
-| Candle 0.11 | 501,333 | 0.041205 |
+| official Facebook tracker | 458,829 | 1.0 |
+| pre-upgrade Candle | 464,963 | 0.961942 |
+| Candle 0.11 | 501,333 | 0.911318 |
 
-Official output is therefore not close to either Candle pin. The official
+The pre-upgrade result is close but not exact; Candle 0.11 materially increases
+the divergence and adds mask area. The corrected official
 reference metadata SHA-256 is
-`19eb5ad6870e2516df3aa0dbedf8da766b5b57aa49425702a334e7b1e4ad4464`,
+`00220007d3e1daec484842212e07a34004c4cba1bba0a54cf4ae190c3d45b6d3`,
 the result metadata SHA-256 is
-`4fea3408b3a6187dc556c9efe83e6a2eb3888bd934eb750dc0de97cb913e6f3b`,
+`3c5ca663fad07daca6a15cf857710a1c6d08ce49e5bb921c1715928a02f8ec35`,
 and the aggregate ordered PNG-mask hash is
-`e4b799e04193512a05a86d7766230135968e3d87c63418dd35b72db80df7ee08`.
+`0ed3b58361b6fe1ab9c169b111745dcc92a4346fb141b855b41ba86eab3fea2f`.
 
-Disposition: no new unexplained regression is attributable to Candle 0.11, but
-the representative Medical output cannot be certified as upstream-compatible.
-Issue #40 should remain open until the preprocessing/prompt/tracker divergence
-is corrected or an explicit project-owner exception is accepted.
+Disposition: the Candle 0.11 candidate introduces a new unexplained Medical
+mask regression relative to both the old pin and official output. Issue #40
+should remain open until the divergence is corrected or an explicit
+project-owner exception is accepted.
 
 ## Temporary consumer compatibility
 
