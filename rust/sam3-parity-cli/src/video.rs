@@ -5,10 +5,12 @@ use std::fs;
 use std::io::{Cursor, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use candle::Device;
 use candle::{IndexOp, Tensor};
+use candle_examples::sam3_video::{MediaFrameSource, PngVideoDebugArtifactSink};
 use candle_transformers::models::sam3;
 use image::{ImageReader, Rgba, RgbaImage};
 use serde::{Deserialize, Serialize};
@@ -30,6 +32,8 @@ pub struct VideoMode {
     pub video_path: String,
     pub tokenizer_path: Option<String>,
     pub prompt_text: Option<String>,
+    pub prompt_tokens: Option<sam3::TextPromptTokens>,
+    pub visual_prompt_tokens: Option<sam3::TextPromptTokens>,
     pub points: Vec<(f32, f32)>,
     pub point_labels: Vec<u32>,
     pub boxes: Vec<(f32, f32, f32, f32)>,
@@ -315,15 +319,22 @@ pub fn run_video_prediction(
     println!("Starting video prediction for: {}", video_mode.video_path);
 
     let source_path = PathBuf::from(&video_mode.video_path);
-    let source = sam3::VideoSource::from_path(&video_mode.video_path)?;
+    let config = model.config();
+    let source = MediaFrameSource::from_path(
+        &video_mode.video_path,
+        config.image.image_size,
+        config.image.image_mean,
+        config.image.image_std,
+    )?;
     let session_options = sam3::VideoSessionOptions {
-        tokenizer_path: video_mode.tokenizer_path.as_ref().map(PathBuf::from),
+        visual_prompt_tokens: video_mode.visual_prompt_tokens.clone(),
         memory_profile: sam3::VideoMemoryProfile::Balanced,
         offload_frames_to_cpu: video_mode.offload_frames_to_cpu,
         offload_state_to_cpu: video_mode.offload_state_to_cpu,
         prefetch_ahead: video_mode.prefetch_ahead,
         prefetch_behind: video_mode.prefetch_behind,
         max_feature_cache_entries: video_mode.max_feature_cache_entries,
+        max_non_cond_tracker_states: None,
     };
     let debug_root = output_dir.join(VIDEO_DEBUG_DIR);
     if video_mode.debug_bundle {
@@ -337,9 +348,14 @@ pub fn run_video_prediction(
             capture_frame_indices: video_mode.debug_frame_indices.clone(),
             capture_first_propagated_only: true,
             output_root: video_mode.debug_bundle.then_some(debug_root.clone()),
+            artifact_sink: video_mode.debug_bundle.then(|| {
+                Arc::new(PngVideoDebugArtifactSink::new(debug_root.clone()))
+                    as Arc<dyn sam3::VideoDebugArtifactSink>
+            }),
         },
     );
-    let session_id = predictor.start_session(source, session_options)?;
+    let session_id =
+        predictor.start_session_with_frame_source(Box::new(source), session_options)?;
     let num_frames = predictor.session_frame_count(&session_id)?;
     println!("Created video session {session_id} with {num_frames} frames");
 
@@ -354,7 +370,7 @@ pub fn run_video_prediction(
         &session_id,
         0,
         sam3::SessionPrompt {
-            text: video_mode.prompt_text.clone(),
+            text: video_mode.prompt_tokens.clone(),
             points: (!video_mode.points.is_empty()).then_some(video_mode.points.clone()),
             point_labels: (!video_mode.point_labels.is_empty())
                 .then_some(video_mode.point_labels.clone()),
@@ -547,14 +563,37 @@ pub fn run_video_reference_comparison(
             .map(|manifest| manifest.capture_frame_indices.clone())
             .unwrap_or_default()
     };
+    let tokenizer_path = metadata
+        .tokenizer_path
+        .as_ref()
+        .map(|path| paths::resolve_metadata_path(&bundle_root, path))
+        .map(|path| path.to_string_lossy().into_owned());
+    let tokenizer =
+        if metadata.prompt_text.is_some() || !metadata.boxes_cxcywh_normalized.is_empty() {
+            let path = tokenizer_path
+                .as_deref()
+                .context("video reference text and box prompts require tokenizer_path metadata")?;
+            Some(crate::tokenization::Sam3Tokenizer::from_path(
+                path,
+                model.config().text.context_length,
+            )?)
+        } else {
+            None
+        };
+    let prompt_tokens = metadata
+        .prompt_text
+        .as_deref()
+        .map(|text| tokenizer.as_ref().expect("required above").encode(text))
+        .transpose()?;
+    let visual_prompt_tokens = (!metadata.boxes_cxcywh_normalized.is_empty())
+        .then(|| tokenizer.as_ref().expect("required above").encode("visual"))
+        .transpose()?;
     let video_mode = VideoMode {
         video_path: reference_frames_dir.display().to_string(),
-        tokenizer_path: metadata
-            .tokenizer_path
-            .as_ref()
-            .map(|path| paths::resolve_metadata_path(&bundle_root, path))
-            .map(|path| path.to_string_lossy().into_owned()),
+        tokenizer_path,
         prompt_text: metadata.prompt_text.clone(),
+        prompt_tokens,
+        visual_prompt_tokens,
         points: metadata
             .points_xy_normalized
             .iter()
