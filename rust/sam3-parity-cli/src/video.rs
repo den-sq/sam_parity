@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use candle::Device;
 use candle::{IndexOp, Tensor};
 use candle_examples::sam3_video::{MediaFrameSource, PngVideoDebugArtifactSink};
