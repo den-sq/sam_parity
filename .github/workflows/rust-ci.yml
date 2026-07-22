@@ -6,6 +6,9 @@ on:
     branches:
       - main
 
+env:
+  CANDLE_SAM3_COMMIT: 104948e6a19d36cbe66c67bbe8c8f87b96485872
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -13,7 +16,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Clone Candle SAM3 path dependency
-        run: git clone --depth 1 https://github.com/den-sq/candle_sam3 ../candle_sam3
+        run: |
+          git clone https://github.com/den-sq/candle_sam3 ../candle_sam3
+          git -C ../candle_sam3 checkout "${CANDLE_SAM3_COMMIT}"
       - uses: Swatinem/rust-cache@v2
       - name: Cargo check
         run: cargo check --workspace
@@ -26,7 +31,9 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - name: Clone Candle SAM3 path dependency
-        run: git clone --depth 1 https://github.com/den-sq/candle_sam3 ../candle_sam3
+        run: |
+          git clone https://github.com/den-sq/candle_sam3 ../candle_sam3
+          git -C ../candle_sam3 checkout "${CANDLE_SAM3_COMMIT}"
       - uses: Swatinem/rust-cache@v2
       - name: Cargo test
         run: cargo test --workspace
@@ -39,6 +46,8 @@ jobs:
         with:
           components: rustfmt
       - name: Clone Candle SAM3 path dependency
-        run: git clone --depth 1 https://github.com/den-sq/candle_sam3 ../candle_sam3
+        run: |
+          git clone https://github.com/den-sq/candle_sam3 ../candle_sam3
+          git -C ../candle_sam3 checkout "${CANDLE_SAM3_COMMIT}"
       - name: Rustfmt
         run: cargo fmt --package sam3-parity-lib --package sam3-parity-cli -- --check

@@ -270,6 +270,30 @@ mod tests {
         tokenizer.exists().then_some(tokenizer)
     }
 
+    fn sam3_test_text_tokens(text: &str) -> Result<Option<sam3::TextPromptTokens>> {
+        let Some(path) = sam3_test_tokenizer_path() else {
+            return Ok(None);
+        };
+        let tokenizer = Sam3Tokenizer::from_path(path, Config::default().text.context_length)
+            .map_err(|error| candle::Error::Msg(error.to_string()))?;
+        Ok(Some(
+            tokenizer
+                .encode(text)
+                .map_err(|error| candle::Error::Msg(error.to_string()))?,
+        ))
+    }
+
+    fn reference_frame_source(model: &Sam3ImageModel, bundle: &str) -> Result<MediaFrameSource> {
+        let config = model.config();
+        MediaFrameSource::from_path(
+            reference_input_frames_dir(bundle),
+            config.image.image_size,
+            config.image.image_mean,
+            config.image.image_std,
+        )
+        .map_err(|error| candle::Error::Msg(error.to_string()))
+    }
+
     fn reference_bundle_dir(name: &str) -> PathBuf {
         paths::bundle_root().join(name)
     }

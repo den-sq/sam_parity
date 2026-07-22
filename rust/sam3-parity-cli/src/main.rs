@@ -9,6 +9,7 @@ mod interactive;
 mod interactive_compare;
 mod parity;
 mod paths;
+mod tokenization;
 mod video;
 
 #[cfg(all(test, feature = "full-parity"))]
@@ -2682,7 +2683,7 @@ pub fn main() -> anyhow::Result<()> {
             .as_ref()
             .map(|inputs| inputs.point_labels.clone())
             .unwrap_or_default();
-        let boxes = geometry_inputs
+        let boxes: Vec<(f32, f32, f32, f32)> = geometry_inputs
             .as_ref()
             .map(|inputs| {
                 inputs
@@ -2698,10 +2699,41 @@ pub fn main() -> anyhow::Result<()> {
             .unwrap_or_default();
         let video_tokenizer_path =
             infer_video_tokenizer_path(args.tokenizer.as_deref(), args.checkpoint.as_deref());
+        let video_tokenizer = if args.video_prompt.is_some() || !boxes.is_empty() {
+            let path = video_tokenizer_path.as_deref().ok_or_else(|| {
+                E::msg("SAM3 video text and box prompts require --tokenizer <tokenizer.json>")
+            })?;
+            Some(tokenization::Sam3Tokenizer::from_path(
+                path,
+                config.text.context_length,
+            )?)
+        } else {
+            None
+        };
+        let prompt_tokens = args
+            .video_prompt
+            .as_deref()
+            .map(|prompt| {
+                video_tokenizer
+                    .as_ref()
+                    .expect("required above")
+                    .encode(prompt)
+            })
+            .transpose()?;
+        let visual_prompt_tokens = (!boxes.is_empty())
+            .then(|| {
+                video_tokenizer
+                    .as_ref()
+                    .expect("required above")
+                    .encode("visual")
+            })
+            .transpose()?;
         let video_mode = video::VideoMode {
             video_path: video_path.to_string(),
             tokenizer_path: video_tokenizer_path,
             prompt_text: args.video_prompt.clone(),
+            prompt_tokens,
+            visual_prompt_tokens,
             points,
             point_labels,
             boxes,
