@@ -7,11 +7,11 @@
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(
-            source,
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
             VideoSessionOptions {
                 tokenizer_path: Some(tokenizer_path),
                 ..VideoSessionOptions::default()
@@ -131,10 +131,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (points, point_labels) = load_reference_point_prompt(bundle)?;
         let obj_id = predictor.add_prompt(
             &session_id,
@@ -257,10 +257,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (points, point_labels) = load_reference_point_prompt(bundle)?;
         predictor.add_prompt(
             &session_id,
@@ -336,10 +336,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (initial_points, initial_labels) = load_reference_point_prompt_on_frame(bundle, 0)?;
         let obj_id = predictor.add_prompt(
             &session_id,
@@ -653,10 +653,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let video_size = predictor
             .parity_session(&session_id)
             .expect("session exists")
@@ -817,10 +817,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         predictor.add_prompt(
             &session_id,
             0,
@@ -902,10 +902,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         predictor.add_prompt(
             &session_id,
             0,
@@ -1049,10 +1049,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         predictor.add_prompt(
             &session_id,
             20,
@@ -1134,11 +1134,11 @@
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(
-            source,
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
             VideoSessionOptions {
                 tokenizer_path: Some(tokenizer_path),
                 ..VideoSessionOptions::default()
@@ -1205,10 +1205,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (points, point_labels) = load_reference_point_prompt(bundle)?;
         predictor.add_prompt(
             &session_id,
@@ -1289,10 +1289,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         predictor.add_prompt(
             &session_id,
             0,
@@ -1440,11 +1440,11 @@
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(
-            source,
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
             VideoSessionOptions {
                 tokenizer_path: Some(tokenizer_path),
                 ..VideoSessionOptions::default()
@@ -1631,11 +1631,11 @@
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(
-            source,
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
             VideoSessionOptions {
                 tokenizer_path: Some(tokenizer_path),
                 ..VideoSessionOptions::default()
@@ -1753,10 +1753,10 @@
         let bundle = "reference_video_suppressed_obj_ids_text_bed_debug";
         let model = tiny_model(device)?;
         let tracker = tiny_tracker(device)?;
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         for obj_id in load_reference_frame_object_ids(bundle, 0)? {
             let (_boxes, _score, mask_path) = load_reference_object_frame_output(bundle, 0, obj_id)?;
             predictor.add_mask_prompt(
@@ -1843,10 +1843,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (points, point_labels) = load_reference_point_prompt_on_frame(bundle, 5)?;
         predictor.add_prompt(
             &session_id,
