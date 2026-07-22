@@ -5,7 +5,7 @@ Tracking issue: <https://github.com/den-sq/sam_parity/issues/35>
 ## Candidate and ancestry
 
 - Candle candidate: `2cf6179b4f10b9ddfb973f1b154931f68e7a9f56`
-- Plugin candidate: `e41b1ca8e4c4626b522c2ac72519f9a9141e773a`
+- Plugin candidate: `dd03d0842f087a166e7000ee155c7512b9db00bf`
 - Required Candle 0.11 integration merge: `c11c900354467d50985a78a1895945199c9f4ecb`
 - Integration parents: fork `8fb0a15e148353129d76987bbfd5f751f8c336d9`, accepted integration branch `71fad7110bcd1d861102ef256a76eeeac1300bce`
 - `git merge-base --is-ancestor c11c9003 2cf6179b` succeeds.
@@ -23,8 +23,8 @@ The plugin candidate is stacked on progress/reconnect commit `43203f2e7a5f27e4d3
 ## Selected configuration
 
 - Compute dtype: F32
-- Retained mask-memory dtype: BF16, with cast-on-read to compute dtype
-- State profile: CPU offload
+- Retained mask-memory dtype: F32
+- State profile: bounded GPU resident
 - Feature cache entries: 1
 - Non-conditioning tracker-state limit: 32
 - Hotstart delay: 0
@@ -34,9 +34,10 @@ The plugin candidate is stacked on progress/reconnect commit `43203f2e7a5f27e4d3
 
 F16 compute is rejected. It did not complete the eight-frame video fixture after bounded compatibility fixes: the last disposition run reached frame 1 (`Inference=12%`) and failed at another F32/F16 convolution boundary. Because it did not complete, no mask-parity or material-speedup claim is possible. The plugin rejects `SAM3_COMPUTE_DTYPE=f16` rather than exposing a known-failing mode. BF16 compute was not evaluated because compute capability 7.5 has no native BF16 tensor-core execution.
 
-## Exact-SHA short certification
+## Pre-selection retained-dtype certification
 
-Both accepted runs used:
+These pre-selection CPU-offload runs used plugin
+`e41b1ca8e4c4626b522c2ac72519f9a9141e773a` and:
 
 - image `sha256:67956d26e644e3ca620243283647165832b73156cddeee7221429cb1fec4b4f1`
 - eight `200 x 200` frames derived from the private representative Medical-SAM3 fixture
@@ -51,7 +52,10 @@ The checkpoint and input fixture are private test artifacts and are not redistri
 | F32 | BF16 | 173 s | 0.0462 fps | 7,537 MiB | 18,587,680 | 476,687,392 | `3b585209390c37ee9d706dba7deba404b78140e5ba011eba47cc79cc57081589` |
 | F32 | F32 | 176 s | 0.0455 fps | 7,505 MiB | 23,896,096 | 481,995,808 | `2f6c2e306196ef3a46ce52e4baabe2c48b0e46c0c086e22077c290a1ef46ca03` |
 
-The short-run wall telemetry includes model startup and is not an authoritative long-stack throughput estimate. It does prove the 14 GiB VRAM gate with more than 6 GiB headroom. The inherited 512-frame CPU-offload control recorded approximately 0.212 fps and 7,505 MiB peak VRAM, so the original 0.68 fps target is not met. Closing <https://github.com/den-sq/sam_parity/issues/35> therefore requires explicit approval of a revised runtime target; <https://github.com/den-sq/sam_parity/issues/36> still owns the unchanged-SHA 32/128/512 staged matrix and full-stack acceptance run.
+The short-run wall telemetry includes model startup and is not an authoritative
+long-stack throughput estimate. It does prove the 14 GiB VRAM gate with more
+than 6 GiB headroom. The previously inherited approximately 0.212 fps
+512-frame result is not accepted for the current exact candidate.
 
 BF16 retained storage saved 5,308,416 bytes (22.2%) of tracker-state CPU memory in this eight-state run. It changed 23 of 320,000 binary output pixels relative to F32 retained state, with global IoU `0.9999084544`; per-frame IoU was:
 
@@ -60,7 +64,31 @@ BF16 retained storage saved 5,308,416 bytes (22.2%) of tracker-state CPU memory 
 0.9999686619, 0.9999687373, 1.0, 0.9994762140
 ```
 
-This is a favorable storage tradeoff, but the tolerance decision is explicit rather than described as bit parity.
+This is a favorable storage tradeoff, but it is not selected for the provisional
+default because the F32 GPU-resident controls are byte-identical and remain
+comfortably within the VRAM gate.
+
+## Bounded GPU-resident selection
+
+The exact Candle candidate and pre-default plugin image were run on a repeated
+64-frame medical fixture with F32 compute, F32 retained state, feature cache 1,
+trim enabled, a 32-state non-conditioning bound, and hotstart delay 0.
+
+| Profile | Propagation | Peak reported VRAM | Output SHA-256 |
+|---|---:|---:|---|
+| GPU resident, cool control | 318.48 s | 10,691 MiB | `895aceb638295c0b46e7122fea5ae588ec8bc9d9cef657fab1169a8fa41ff8c6` |
+| CPU offload | 384.43 s | 9,098 MiB | `895aceb638295c0b46e7122fea5ae588ec8bc9d9cef657fab1169a8fa41ff8c6` |
+| GPU resident, heat-soaked control | 326.59 s | 10,647 MiB | `895aceb638295c0b46e7122fea5ae588ec8bc9d9cef657fab1169a8fa41ff8c6` |
+
+The matched heat-soaked GPU-resident control used 15.0% less propagation time
+than CPU offload. All runs retained 33 tracker states including 32
+non-conditioning states, and the selected GPU-resident profile remained below
+the 14 GiB gate.
+
+A 512-frame follow-up held an approximately 10.5 GiB VRAM plateau through 25%
+progress, but it was stopped after the host driver collapsed to P3/300 MHz at
+100% utilization and requested a 50 W power limit instead of its 90 W default.
+That run is memory evidence only, not valid sustained-throughput evidence.
 
 ## Hot-path and synchronization disposition
 
@@ -87,10 +115,20 @@ Completed verification:
 - `cargo test -p candle-transformers --lib`: passed earlier in the candidate stack; the final additions are covered by the focused suite, including an F16 CPU-mask-cleanup regression.
 - `CUDARC_CUDA_VERSION=12040 CUDA_COMPUTE_CAP=75 cargo check -p candle-transformers --features cuda`: passed for the candidate stack (11 PTX and 15 CUDA kernels).
 - Plugin `cargo test` against the candidate Candle worktree: 77 passed; annotation contract passed; checkpoint-load test ignored unless a private checkpoint path is supplied.
+- Focused plugin Candle-SAM3 module after changing the defaults: 13 passed,
+  including default/fallback parsing and video lifecycle coverage.
 - `sam_parity` workspace tests: 16 passed, 10 fixture investigations ignored; contract tests 3 passed.
 - `cargo test -p sam3-parity-cli --features full-parity --no-run`: passed.
 - Exact-SHA F32/BF16 and F32/F32 GPU smokes: passed geometry, binary-output, CUDA-device, image-revision, and checkpoint-revision checks.
 
 ## Freeze disposition
 
-The proposed freeze is Candle `2cf6179b4f10b9ddfb973f1b154931f68e7a9f56` plus plugin `e41b1ca8e4c4626b522c2ac72519f9a9141e773a`, selecting F32 compute and BF16 retained storage. It is ready for review as a draft candidate, but <https://github.com/den-sq/sam_parity/issues/35> should remain open until reviewers either approve a revised throughput target or require additional optimization before <https://github.com/den-sq/sam_parity/issues/36> freezes the unchanged SHAs.
+The proposed provisional freeze is Candle
+`2cf6179b4f10b9ddfb973f1b154931f68e7a9f56` plus plugin
+`dd03d0842f087a166e7000ee155c7512b9db00bf`, selecting bounded GPU-resident F32
+compute and retained state. CPU offload and BF16 retained storage remain explicit
+fallback/benchmark controls. <https://github.com/den-sq/sam_parity/issues/35>
+should remain open until sustained throughput can be measured without the host
+power-policy collapse and reviewers either approve a revised runtime target or
+require additional bounded optimization before
+<https://github.com/den-sq/sam_parity/issues/36> freezes the unchanged SHAs.
