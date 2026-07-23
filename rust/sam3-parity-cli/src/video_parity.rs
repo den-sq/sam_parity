@@ -876,6 +876,314 @@
         Ok(())
     }
 
+    #[cfg(feature = "cuda")]
+    fn issue46_f16_session_options() -> VideoSessionOptions {
+        VideoSessionOptions {
+            retained_state_dtype: sam3::RetainedStateDType::BF16,
+            max_non_cond_tracker_states: Some(16),
+            ..VideoSessionOptions::default()
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn assert_issue46_frame_matches_facebook(
+        bundle: &str,
+        frame: &sam3::VideoFrameOutput,
+        obj_id: u32,
+        minimum_iou: f32,
+    ) -> Result<()> {
+        let object = frame
+            .objects
+            .iter()
+            .find(|object| object.obj_id == obj_id)
+            .ok_or_else(|| {
+                candle::Error::Msg(format!(
+                    "{bundle} frame {} missing object {obj_id}",
+                    frame.frame_idx
+                ))
+            })?;
+        for (suffix, tensor) in [
+            ("mask_logits", &object.mask_logits),
+            ("masks", &object.masks),
+            ("boxes_xyxy", &object.boxes_xyxy),
+            ("scores", &object.scores),
+        ] {
+            assert_all_finite(
+                &format!("{bundle}.frame{}.obj{obj_id}.{suffix}", frame.frame_idx),
+                tensor,
+            )?;
+        }
+        if let Some(presence_scores) = object.presence_scores.as_ref() {
+            assert_all_finite(
+                &format!(
+                    "{bundle}.frame{}.obj{obj_id}.presence_scores",
+                    frame.frame_idx
+                ),
+                presence_scores,
+            )?;
+        }
+        let (_boxes, _score, expected_mask_path) =
+            load_reference_frame_output(bundle, frame.frame_idx)?;
+        let iou = binary_mask_iou(&object.masks, &expected_mask_path)?;
+        eprintln!(
+            "[ISSUE46_WORKFLOW] bundle={bundle:?} frame={} obj_id={obj_id} iou={iou:.6}",
+            frame.frame_idx
+        );
+        if iou < minimum_iou {
+            candle::bail!(
+                "{bundle} frame {} object {obj_id} mask IoU {iou:.6} is below {minimum_iou:.6}",
+                frame.frame_idx
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "serial checkpoint-backed native-F16 CUDA workflow acceptance for issue #46"]
+    fn f16_cuda_video_workflow_acceptance_matrix() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let forward_bundle = "reference_video_point_debug_single_click";
+        let Some((model, tracker)) =
+            load_runtime_models_from_checkpoint_on(Some(forward_bundle), DType::F16, &device)?
+        else {
+            return Ok(());
+        };
+        if model.compute_dtype() != DType::F16 || tracker.parity_compute_dtype() != DType::F16 {
+            candle::bail!(
+                "requested F16 compute, got image={:?} tracker={:?}",
+                model.compute_dtype(),
+                tracker.parity_compute_dtype()
+            );
+        }
+
+        // Forward streaming, bounded retained history, hotstart draining,
+        // reset/close cleanup, and a fresh-session restart all share one model
+        // load so the lifecycle assertions exercise the production owner.
+        let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
+        apply_reference_predictor_runtime_overrides(&mut predictor, forward_bundle)?;
+        predictor.parity_video_config_mut().hotstart_delay = 2;
+        let source = reference_frame_source(&model, forward_bundle)?;
+        let session_id = predictor
+            .start_session_with_frame_source(Box::new(source), issue46_f16_session_options())?;
+        let (points, point_labels) = load_reference_point_prompt(forward_bundle)?;
+        let obj_id = predictor.add_prompt(
+            &session_id,
+            0,
+            SessionPrompt {
+                text: None,
+                points: Some(points),
+                point_labels: Some(point_labels),
+                boxes: None,
+                box_labels: None,
+            },
+            None,
+            true,
+            true,
+        )?;
+        let mut forward_frames = Vec::new();
+        predictor.propagate_in_video_stream(
+            &session_id,
+            PropagationOptions {
+                direction: PropagationDirection::Forward,
+                start_frame_idx: Some(0),
+                max_frame_num_to_track: Some(4),
+                output_prob_threshold: None,
+            },
+            |frame| {
+                assert_issue46_frame_matches_facebook(forward_bundle, frame, obj_id, 0.97)?;
+                forward_frames.push(frame.frame_idx);
+                Ok(())
+            },
+        )?;
+        assert_eq!(forward_frames, vec![0, 1, 2, 3, 4]);
+        let forward_stats = predictor.session_cache_stats(&session_id)?;
+        assert_eq!(
+            forward_stats.retained_state_dtype,
+            sam3::RetainedStateDType::BF16
+        );
+        assert!(
+            forward_stats.retained_non_cond_tracker_states <= 16,
+            "bounded history exceeded 16 states: {:?}",
+            forward_stats
+        );
+        assert!(
+            forward_stats.cached_feature_entries <= 2,
+            "feature cache exceeded the configured bound: {:?}",
+            forward_stats
+        );
+        assert_eq!(forward_stats.hotstart_buffered_frames, 0);
+        assert!(
+            (1..=2).contains(&forward_stats.peak_hotstart_buffered_frames),
+            "hotstart buffer was not exercised or exceeded its delay: {:?}",
+            forward_stats
+        );
+
+        predictor.reset_session(&session_id)?;
+        let reset_stats = predictor.session_cache_stats(&session_id)?;
+        assert_eq!(reset_stats.tracked_objects, 0);
+        assert_eq!(reset_stats.retained_tracker_states, 0);
+        assert_eq!(reset_stats.retained_output_frame_indices, 0);
+        assert_eq!(reset_stats.cached_output_frames, 0);
+        assert_eq!(reset_stats.cached_feature_entries, 0);
+        assert_eq!(reset_stats.hotstart_buffered_frames, 0);
+        assert_eq!(reset_stats.cpu_bytes.total(), 0);
+        assert_eq!(reset_stats.device_bytes.total(), 0);
+        predictor.close_session(&session_id)?;
+        assert!(predictor.session_cache_stats(&session_id).is_err());
+
+        let restart_source = reference_frame_source(&model, forward_bundle)?;
+        let restart_id = predictor.start_session_with_frame_source(
+            Box::new(restart_source),
+            issue46_f16_session_options(),
+        )?;
+        assert_ne!(restart_id, session_id);
+        predictor.close_session(&restart_id)?;
+        assert!(predictor.session_cache_stats(&restart_id).is_err());
+
+        // Backward propagation from a late prompt frame.
+        let backward_bundle = "reference_video_reverse_propagation_debug";
+        let mut backward_predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
+        apply_reference_predictor_runtime_overrides(&mut backward_predictor, backward_bundle)?;
+        let backward_source = reference_frame_source(&model, backward_bundle)?;
+        let backward_session = backward_predictor.start_session_with_frame_source(
+            Box::new(backward_source),
+            issue46_f16_session_options(),
+        )?;
+        backward_predictor.add_prompt(
+            &backward_session,
+            20,
+            SessionPrompt {
+                text: None,
+                points: Some(vec![(0.61, 0.69)]),
+                point_labels: Some(vec![1]),
+                boxes: None,
+                box_labels: None,
+            },
+            Some(1),
+            true,
+            true,
+        )?;
+        let mut backward_frames = Vec::new();
+        backward_predictor.propagate_in_video_stream(
+            &backward_session,
+            PropagationOptions {
+                direction: PropagationDirection::Backward,
+                start_frame_idx: Some(20),
+                max_frame_num_to_track: Some(2),
+                output_prob_threshold: None,
+            },
+            |frame| {
+                assert_issue46_frame_matches_facebook(backward_bundle, frame, 1, 0.95)?;
+                backward_frames.push(frame.frame_idx);
+                Ok(())
+            },
+        )?;
+        assert_eq!(backward_frames, vec![20, 19, 18]);
+        assert!(
+            backward_predictor
+                .session_cache_stats(&backward_session)?
+                .retained_non_cond_tracker_states
+                <= 16
+        );
+        backward_predictor.close_session(&backward_session)?;
+        assert!(
+            backward_predictor
+                .session_cache_stats(&backward_session)
+                .is_err()
+        );
+
+        // Correction after an initial forward pass, followed by propagation
+        // that consumes the corrected conditioning state.
+        let correction_bundle = "reference_video_correction_click_debug";
+        let mut correction_predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
+        apply_reference_predictor_runtime_overrides(&mut correction_predictor, correction_bundle)?;
+        let correction_source = reference_frame_source(&model, correction_bundle)?;
+        let correction_session = correction_predictor.start_session_with_frame_source(
+            Box::new(correction_source),
+            issue46_f16_session_options(),
+        )?;
+        let (initial_points, initial_labels) =
+            load_reference_point_prompt_on_frame(correction_bundle, 0)?;
+        let correction_obj_id = correction_predictor.add_prompt(
+            &correction_session,
+            0,
+            SessionPrompt {
+                text: None,
+                points: Some(initial_points),
+                point_labels: Some(initial_labels),
+                boxes: None,
+                box_labels: None,
+            },
+            None,
+            true,
+            true,
+        )?;
+        correction_predictor.propagate_in_video(
+            &correction_session,
+            PropagationOptions {
+                direction: PropagationDirection::Forward,
+                start_frame_idx: Some(0),
+                max_frame_num_to_track: Some(9),
+                output_prob_threshold: None,
+            },
+        )?;
+        let (correction_points, correction_labels) =
+            load_reference_point_prompt_on_frame(correction_bundle, 8)?;
+        correction_predictor.add_prompt(
+            &correction_session,
+            8,
+            SessionPrompt {
+                text: None,
+                points: Some(correction_points),
+                point_labels: Some(correction_labels),
+                boxes: None,
+                box_labels: None,
+            },
+            Some(correction_obj_id),
+            false,
+            true,
+        )?;
+        let correction_core = Sam3VideoTrackerCore::new(&tracker);
+        let correction_config = correction_predictor.parity_video_config().clone();
+        for frame_idx in [8usize, 9usize] {
+            let frame = {
+                let session = correction_predictor
+                    .parity_session_mut(&correction_session)
+                    .expect("correction session exists");
+                correction_core.parity_process_frame(
+                    &model,
+                    &device,
+                    &correction_config,
+                    session,
+                    frame_idx,
+                    PropagationDirection::Forward,
+                    VIDEO_DEBUG_MASK_THRESHOLD,
+                )?
+            };
+            assert_issue46_frame_matches_facebook(
+                correction_bundle,
+                &frame,
+                correction_obj_id,
+                0.95,
+            )?;
+        }
+        assert!(
+            correction_predictor
+                .session_cache_stats(&correction_session)?
+                .retained_non_cond_tracker_states
+                <= 16
+        );
+        correction_predictor.close_session(&correction_session)?;
+        assert!(
+            correction_predictor
+                .session_cache_stats(&correction_session)
+                .is_err()
+        );
+        device.synchronize()?;
+        Ok(())
+    }
+
     fn assert_video_process_frame_matches_point_reference_bundle_frame0(bundle: &str) -> Result<()> {
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
