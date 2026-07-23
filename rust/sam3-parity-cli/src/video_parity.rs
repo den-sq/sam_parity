@@ -365,26 +365,40 @@
         let allowed = expected
             .abs()?
             .affine(tolerance.rtol as f64, tolerance.atol as f64)?;
+        if diff.elem_count() == 0 {
+            eprintln!(
+                "[ISSUE46_TENSOR] label={label:?} atol={} rtol={} empty=true",
+                tolerance.atol, tolerance.rtol
+            );
+            return Ok(());
+        }
         let max_abs_diff = diff
             .flatten_all()?
             .max(0)?
             .to_vec0::<f32>()?;
-        let max_excess = diff
-            .broadcast_sub(&allowed)?
+        let mean_abs_diff = diff.mean_all()?.to_vec0::<f32>()?;
+        let excess = diff.broadcast_sub(&allowed)?;
+        let max_excess = excess
             .flatten_all()?
             .max(0)?
             .to_vec0::<f32>()?;
+        let violation_count = excess
+            .gt(0f64)?
+            .to_dtype(DType::F32)?
+            .sum_all()?
+            .to_vec0::<f32>()? as usize;
+        let violation_rate = violation_count as f32 / diff.elem_count() as f32;
+        eprintln!(
+            "[ISSUE46_TENSOR] label={label:?} atol={} rtol={} max_abs_diff={max_abs_diff:.6} mean_abs_diff={mean_abs_diff:.6} violation_count={violation_count} violation_rate={violation_rate:.8}",
+            tolerance.atol, tolerance.rtol
+        );
         if max_excess > 0.0 {
             candle::bail!(
-                "{label} exceeded atol={} rtol={}: max_abs_diff={max_abs_diff:.6}, max_excess={max_excess:.6}",
+                "{label} exceeded atol={} rtol={}: max_abs_diff={max_abs_diff:.6}, mean_abs_diff={mean_abs_diff:.6}, max_excess={max_excess:.6}, violation_count={violation_count}, violation_rate={violation_rate:.8}",
                 tolerance.atol,
                 tolerance.rtol
             );
         }
-        eprintln!(
-            "[ISSUE46_TENSOR] label={label:?} atol={} rtol={} max_abs_diff={max_abs_diff:.6}",
-            tolerance.atol, tolerance.rtol
-        );
         Ok(())
     }
 
@@ -594,7 +608,7 @@
             frame0_mask: to_cpu(&frame0_object.masks)?,
             frame1_mask: to_cpu(&frame1_object.masks)?,
             frame1_low_res_logits: to_cpu(&frame1_state.low_res_masks)?,
-            frame1_high_res_logits: to_cpu(&frame1_state.high_res_masks)?,
+            frame1_high_res_logits: to_cpu(&frame1_object.mask_logits)?,
             frame1_obj_ptr: to_cpu(&frame1_state.obj_ptr)?,
             frame1_object_score_logits: to_cpu(&frame1_state.object_score_logits)?,
             frame1_maskmem_features: to_cpu(
