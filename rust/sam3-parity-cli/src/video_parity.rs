@@ -253,6 +253,582 @@
         Ok(())
     }
 
+    #[cfg(feature = "cuda")]
+    #[derive(Debug)]
+    struct ConditionedFrameCudaSnapshot {
+        frame0_mask: Tensor,
+        frame1_mask: Tensor,
+        frame1_low_res_logits: Tensor,
+        frame1_high_res_logits: Tensor,
+        frame1_obj_ptr: Tensor,
+        frame1_object_score_logits: Tensor,
+        frame1_maskmem_features: Tensor,
+        frame1_maskmem_pos_enc: Tensor,
+    }
+
+    #[cfg(feature = "cuda")]
+    #[derive(Clone, Copy, Debug)]
+    struct TensorTolerance {
+        atol: f32,
+        rtol: f32,
+    }
+
+    // Issue #46 predeclared numerical contract. Keep these constants in sync
+    // with docs/CANDLE2_F16_CUDA_ACCEPTANCE.md; do not tune them from a failing
+    // certification run without recording the failure and its root cause.
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_MASK_LOGIT_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.75,
+        rtol: 0.05,
+    };
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_OBJECT_SCORE_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.25,
+        rtol: 0.02,
+    };
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_OBJ_PTR_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.25,
+        rtol: 0.03,
+    };
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_MASKMEM_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.25,
+        rtol: 0.04,
+    };
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 1.0,
+        rtol: 0.05,
+    };
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_OBJECT_SCORE_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.5,
+        rtol: 0.05,
+    };
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_OBJ_PTR_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.5,
+        rtol: 0.05,
+    };
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.5,
+        rtol: 0.08,
+    };
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_MIN_BINARY_IOU: f32 = 0.99;
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_MAX_PIXEL_DELTA_RATE: f32 = 0.005;
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_MIN_BINARY_IOU: f32 = 0.97;
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_MAX_PIXEL_DELTA_RATE: f32 = 0.01;
+
+    #[cfg(feature = "cuda")]
+    fn assert_all_finite(label: &str, tensor: &Tensor) -> Result<()> {
+        let values = tensor
+            .to_device(&Device::Cpu)?
+            .to_dtype(DType::F32)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        if let Some((index, value)) = values
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, value)| !value.is_finite())
+        {
+            candle::bail!("{label} contains non-finite value {value} at flattened index {index}");
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    fn assert_tensor_close_atol_rtol(
+        label: &str,
+        actual: &Tensor,
+        expected: &Tensor,
+        tolerance: TensorTolerance,
+    ) -> Result<()> {
+        if actual.shape() != expected.shape() {
+            candle::bail!(
+                "{label} shape mismatch: actual {:?}, expected {:?}",
+                actual.shape().dims(),
+                expected.shape().dims()
+            );
+        }
+        assert_all_finite(label, actual)?;
+        assert_all_finite(&format!("{label} reference"), expected)?;
+        let actual = actual.to_device(&Device::Cpu)?.to_dtype(DType::F32)?;
+        let expected = expected.to_device(&Device::Cpu)?.to_dtype(DType::F32)?;
+        let diff = actual.broadcast_sub(&expected)?.abs()?;
+        let allowed = expected
+            .abs()?
+            .affine(tolerance.rtol as f64, tolerance.atol as f64)?;
+        let max_abs_diff = diff
+            .flatten_all()?
+            .max(0)?
+            .to_vec0::<f32>()?;
+        let max_excess = diff
+            .broadcast_sub(&allowed)?
+            .flatten_all()?
+            .max(0)?
+            .to_vec0::<f32>()?;
+        if max_excess > 0.0 {
+            candle::bail!(
+                "{label} exceeded atol={} rtol={}: max_abs_diff={max_abs_diff:.6}, max_excess={max_excess:.6}",
+                tolerance.atol,
+                tolerance.rtol
+            );
+        }
+        eprintln!(
+            "[ISSUE46_TENSOR] label={label:?} atol={} rtol={} max_abs_diff={max_abs_diff:.6}",
+            tolerance.atol, tolerance.rtol
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    fn binary_mask_metrics(actual: &Tensor, expected: &Tensor) -> Result<(f32, f32)> {
+        let actual = tensor_to_mask_probs_2d(actual)?;
+        let expected = tensor_to_mask_probs_2d(expected)?;
+        if actual.len() != expected.len()
+            || actual.first().map(Vec::len).unwrap_or(0)
+                != expected.first().map(Vec::len).unwrap_or(0)
+        {
+            candle::bail!(
+                "mask size mismatch: actual={}x{}, expected={}x{}",
+                actual.len(),
+                actual.first().map(Vec::len).unwrap_or(0),
+                expected.len(),
+                expected.first().map(Vec::len).unwrap_or(0)
+            );
+        }
+        let mut intersection = 0usize;
+        let mut union = 0usize;
+        let mut changed = 0usize;
+        let mut total = 0usize;
+        for (actual_row, expected_row) in actual.iter().zip(expected.iter()) {
+            for (actual_value, expected_value) in actual_row.iter().zip(expected_row.iter()) {
+                let actual_fg = *actual_value >= 0.5;
+                let expected_fg = *expected_value >= 0.5;
+                intersection += usize::from(actual_fg && expected_fg);
+                union += usize::from(actual_fg || expected_fg);
+                changed += usize::from(actual_fg != expected_fg);
+                total += 1;
+            }
+        }
+        let iou = if union == 0 {
+            1.0
+        } else {
+            intersection as f32 / union as f32
+        };
+        let pixel_delta_rate = if total == 0 {
+            0.0
+        } else {
+            changed as f32 / total as f32
+        };
+        Ok((iou, pixel_delta_rate))
+    }
+
+    #[cfg(feature = "cuda")]
+    fn assert_binary_mask_metrics(
+        label: &str,
+        actual: &Tensor,
+        expected: &Tensor,
+        min_iou: f32,
+        max_pixel_delta_rate: f32,
+    ) -> Result<()> {
+        let (iou, pixel_delta_rate) = binary_mask_metrics(actual, expected)?;
+        if iou < min_iou || pixel_delta_rate > max_pixel_delta_rate {
+            candle::bail!(
+                "{label} binary mask mismatch: iou={iou:.6} (minimum {min_iou:.6}), pixel_delta_rate={pixel_delta_rate:.6} (maximum {max_pixel_delta_rate:.6})"
+            );
+        }
+        eprintln!(
+            "[ISSUE46_MASK] label={label:?} iou={iou:.6} pixel_delta_rate={pixel_delta_rate:.6}"
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    fn reference_record_tensor(
+        bundle: &str,
+        stage: &str,
+        frame_idx: usize,
+        logical_key: &str,
+    ) -> Result<Tensor> {
+        let record = load_reference_internal_record(bundle, stage, frame_idx)?;
+        let tensor_key = record["tensor_keys"][logical_key].as_str().ok_or_else(|| {
+            candle::Error::Msg(format!(
+                "reference {stage} frame {frame_idx} missing tensor key {logical_key}"
+            ))
+        })?;
+        load_reference_internal_tensor(bundle, tensor_key)
+    }
+
+    #[cfg(feature = "cuda")]
+    fn run_conditioned_frame_cuda_fixture(
+        device: &Device,
+        dtype: DType,
+    ) -> Result<Option<ConditionedFrameCudaSnapshot>> {
+        let bundle = "reference_video_point_debug_single_click";
+        let Some((model, tracker)) =
+            load_runtime_models_from_checkpoint_on(Some(bundle), dtype, device)?
+        else {
+            return Ok(None);
+        };
+        if model.compute_dtype() != dtype || tracker.parity_compute_dtype() != dtype {
+            candle::bail!(
+                "requested {dtype:?} compute, got image={:?} tracker={:?}",
+                model.compute_dtype(),
+                tracker.parity_compute_dtype()
+            );
+        }
+        let source = reference_frame_source(&model, bundle)?;
+        let mut predictor = Sam3VideoPredictor::new(&model, &tracker, device);
+        apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
+            VideoSessionOptions {
+                retained_state_dtype: sam3::RetainedStateDType::BF16,
+                max_non_cond_tracker_states: Some(8),
+                ..VideoSessionOptions::default()
+            },
+        )?;
+        let (points, point_labels) = load_reference_point_prompt(bundle)?;
+        let obj_id = predictor.add_prompt(
+            &session_id,
+            0,
+            SessionPrompt {
+                text: None,
+                points: Some(points),
+                point_labels: Some(point_labels),
+                boxes: None,
+                box_labels: None,
+            },
+            None,
+            true,
+            true,
+        )?;
+        let tracker_core = Sam3VideoTrackerCore::new(&tracker);
+        let video_config = predictor.parity_video_config().clone();
+        let frame0 = {
+            let session = predictor
+                .parity_session_mut(&session_id)
+                .expect("conditioned-frame CUDA session exists");
+            tracker_core.parity_process_frame(
+                &model,
+                device,
+                &video_config,
+                session,
+                0,
+                PropagationDirection::Forward,
+                VIDEO_DEBUG_MASK_THRESHOLD,
+            )?
+        };
+        let frame1 = {
+            let session = predictor
+                .parity_session_mut(&session_id)
+                .expect("conditioned-frame CUDA session exists");
+            tracker_core.parity_process_frame(
+                &model,
+                device,
+                &video_config,
+                session,
+                1,
+                PropagationDirection::Forward,
+                VIDEO_DEBUG_MASK_THRESHOLD,
+            )?
+        };
+        device.synchronize()?;
+        let frame0_object = frame0
+            .objects
+            .iter()
+            .find(|object| object.obj_id == obj_id)
+            .ok_or_else(|| candle::Error::Msg("frame 0 missing prompted object".to_owned()))?;
+        let frame1_object = frame1
+            .objects
+            .iter()
+            .find(|object| object.obj_id == obj_id)
+            .ok_or_else(|| candle::Error::Msg("frame 1 missing propagated object".to_owned()))?;
+        if frame1_object.prompt_frame_idx != Some(0) {
+            candle::bail!(
+                "frame 1 did not retain frame 0 as its conditioning prompt: {:?}",
+                frame1_object.prompt_frame_idx
+            );
+        }
+        let session = predictor
+            .parity_session(&session_id)
+            .expect("conditioned-frame CUDA session exists");
+        let tracked_object = session
+            .parity_tracked_objects()
+            .get(&obj_id)
+            .expect("prompted object remains tracked");
+        let frame0_state = tracked_object
+            .tracker_states
+            .get(&0)
+            .expect("frame 0 conditioning state exists");
+        let frame1_state = tracked_object
+            .tracker_states
+            .get(&1)
+            .expect("frame 1 propagated state exists");
+        if !frame0_state.is_cond_frame || frame1_state.is_cond_frame {
+            candle::bail!(
+                "unexpected conditioning flags: frame0={}, frame1={}",
+                frame0_state.is_cond_frame,
+                frame1_state.is_cond_frame
+            );
+        }
+        if frame0_state.maskmem_features.as_ref().map(Tensor::dtype) != Some(DType::BF16)
+            || frame1_state.maskmem_features.as_ref().map(Tensor::dtype) != Some(DType::BF16)
+        {
+            candle::bail!(
+                "retained mask-memory dtype mismatch: frame0={:?}, frame1={:?}",
+                frame0_state.maskmem_features.as_ref().map(Tensor::dtype),
+                frame1_state.maskmem_features.as_ref().map(Tensor::dtype)
+            );
+        }
+        let to_cpu = |tensor: &Tensor| tensor.to_device(&Device::Cpu);
+        let snapshot = ConditionedFrameCudaSnapshot {
+            frame0_mask: to_cpu(&frame0_object.masks)?,
+            frame1_mask: to_cpu(&frame1_object.masks)?,
+            frame1_low_res_logits: to_cpu(&frame1_state.low_res_masks)?,
+            frame1_high_res_logits: to_cpu(&frame1_state.high_res_masks)?,
+            frame1_obj_ptr: to_cpu(&frame1_state.obj_ptr)?,
+            frame1_object_score_logits: to_cpu(&frame1_state.object_score_logits)?,
+            frame1_maskmem_features: to_cpu(
+                frame1_state
+                    .maskmem_features
+                    .as_ref()
+                    .expect("frame 1 mask-memory features exist"),
+            )?,
+            frame1_maskmem_pos_enc: to_cpu(
+                frame1_state
+                    .maskmem_pos_enc
+                    .as_ref()
+                    .expect("frame 1 mask-memory position encoding exists"),
+            )?,
+        };
+        for (label, tensor) in [
+            ("frame0.mask", &snapshot.frame0_mask),
+            ("frame1.mask", &snapshot.frame1_mask),
+            ("frame1.low_res_logits", &snapshot.frame1_low_res_logits),
+            ("frame1.high_res_logits", &snapshot.frame1_high_res_logits),
+            ("frame1.obj_ptr", &snapshot.frame1_obj_ptr),
+            (
+                "frame1.object_score_logits",
+                &snapshot.frame1_object_score_logits,
+            ),
+            (
+                "frame1.maskmem_features",
+                &snapshot.frame1_maskmem_features,
+            ),
+            (
+                "frame1.maskmem_pos_enc",
+                &snapshot.frame1_maskmem_pos_enc,
+            ),
+        ] {
+            assert_all_finite(label, tensor)?;
+        }
+        Ok(Some(snapshot))
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "serial checkpoint-backed F32/F16 CUDA acceptance fixture for issue #46"]
+    fn conditioned_frame_f16_cuda_matches_f32_and_facebook_references() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let Some(f32_snapshot) = run_conditioned_frame_cuda_fixture(&device, DType::F32)? else {
+            return Ok(());
+        };
+        device.synchronize()?;
+        let Some(f16_snapshot) = run_conditioned_frame_cuda_fixture(&device, DType::F16)? else {
+            return Ok(());
+        };
+        device.synchronize()?;
+
+        assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 low-res logits",
+            &f16_snapshot.frame1_low_res_logits,
+            &f32_snapshot.frame1_low_res_logits,
+            F16_VS_F32_MASK_LOGIT_TOLERANCE,
+        )?;
+        assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 high-res logits",
+            &f16_snapshot.frame1_high_res_logits,
+            &f32_snapshot.frame1_high_res_logits,
+            F16_VS_F32_MASK_LOGIT_TOLERANCE,
+        )?;
+        assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 object score logits",
+            &f16_snapshot.frame1_object_score_logits,
+            &f32_snapshot.frame1_object_score_logits,
+            F16_VS_F32_OBJECT_SCORE_TOLERANCE,
+        )?;
+        assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 object pointer",
+            &f16_snapshot.frame1_obj_ptr,
+            &f32_snapshot.frame1_obj_ptr,
+            F16_VS_F32_OBJ_PTR_TOLERANCE,
+        )?;
+        assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 mask-memory features",
+            &f16_snapshot.frame1_maskmem_features,
+            &f32_snapshot.frame1_maskmem_features,
+            F16_VS_F32_MASKMEM_TOLERANCE,
+        )?;
+        assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 mask-memory position encoding",
+            &f16_snapshot.frame1_maskmem_pos_enc,
+            &f32_snapshot.frame1_maskmem_pos_enc,
+            F16_VS_F32_MASKMEM_TOLERANCE,
+        )?;
+        assert_binary_mask_metrics(
+            "F16/F32 frame 0 output",
+            &f16_snapshot.frame0_mask,
+            &f32_snapshot.frame0_mask,
+            F16_VS_F32_MIN_BINARY_IOU,
+            F16_VS_F32_MAX_PIXEL_DELTA_RATE,
+        )?;
+        assert_binary_mask_metrics(
+            "F16/F32 frame 1 output",
+            &f16_snapshot.frame1_mask,
+            &f32_snapshot.frame1_mask,
+            F16_VS_F32_MIN_BINARY_IOU,
+            F16_VS_F32_MAX_PIXEL_DELTA_RATE,
+        )?;
+
+        let bundle = "reference_video_point_debug_single_click";
+        let facebook_low_res = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.pred_masks",
+        )?;
+        let facebook_high_res = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.pred_masks_high_res",
+        )?;
+        let facebook_obj_ptr = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.obj_ptr",
+        )?;
+        let facebook_object_score = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.object_score_logits",
+        )?;
+        let facebook_maskmem = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.maskmem_features",
+        )?;
+        let facebook_maskmem_pos = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.maskmem_pos_enc.0",
+        )?;
+        let (_boxes, _score, facebook_mask_path) = load_reference_frame_output(bundle, 1)?;
+        let facebook_mask = load_mask_tensor_from_png(&facebook_mask_path)?;
+        for (label, actual, expected, tolerance) in [
+            (
+                "F32/Facebook frame1 low-res logits",
+                &f32_snapshot.frame1_low_res_logits,
+                &facebook_low_res,
+                CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 low-res logits",
+                &f16_snapshot.frame1_low_res_logits,
+                &facebook_low_res,
+                CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 high-res logits",
+                &f32_snapshot.frame1_high_res_logits,
+                &facebook_high_res,
+                CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 high-res logits",
+                &f16_snapshot.frame1_high_res_logits,
+                &facebook_high_res,
+                CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 object score logits",
+                &f32_snapshot.frame1_object_score_logits,
+                &facebook_object_score,
+                CANDLE_VS_FACEBOOK_OBJECT_SCORE_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 object score logits",
+                &f16_snapshot.frame1_object_score_logits,
+                &facebook_object_score,
+                CANDLE_VS_FACEBOOK_OBJECT_SCORE_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 object pointer",
+                &f32_snapshot.frame1_obj_ptr,
+                &facebook_obj_ptr,
+                CANDLE_VS_FACEBOOK_OBJ_PTR_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 object pointer",
+                &f16_snapshot.frame1_obj_ptr,
+                &facebook_obj_ptr,
+                CANDLE_VS_FACEBOOK_OBJ_PTR_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 mask-memory features",
+                &f32_snapshot.frame1_maskmem_features,
+                &facebook_maskmem,
+                CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 mask-memory features",
+                &f16_snapshot.frame1_maskmem_features,
+                &facebook_maskmem,
+                CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 mask-memory position encoding",
+                &f32_snapshot.frame1_maskmem_pos_enc,
+                &facebook_maskmem_pos,
+                CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 mask-memory position encoding",
+                &f16_snapshot.frame1_maskmem_pos_enc,
+                &facebook_maskmem_pos,
+                CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE,
+            ),
+        ] {
+            assert_tensor_close_atol_rtol(label, actual, expected, tolerance)?;
+        }
+        for (label, actual) in [
+            ("F32/Facebook frame 1 output", &f32_snapshot.frame1_mask),
+            ("F16/Facebook frame 1 output", &f16_snapshot.frame1_mask),
+        ] {
+            assert_binary_mask_metrics(
+                label,
+                actual,
+                &facebook_mask,
+                CANDLE_VS_FACEBOOK_MIN_BINARY_IOU,
+                CANDLE_VS_FACEBOOK_MAX_PIXEL_DELTA_RATE,
+            )?;
+        }
+        Ok(())
+    }
+
     fn assert_video_process_frame_matches_point_reference_bundle_frame0(bundle: &str) -> Result<()> {
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());

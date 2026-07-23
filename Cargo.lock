@@ -326,6 +326,7 @@ dependencies = [
  "candle-core",
  "candle-nn",
  "fancy-regex",
+ "half",
  "intel-mkl-src",
  "num-traits",
  "rand",
