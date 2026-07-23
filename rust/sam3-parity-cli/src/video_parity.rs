@@ -648,56 +648,66 @@
         };
         device.synchronize()?;
 
-        assert_tensor_close_atol_rtol(
+        let mut failures = Vec::new();
+        macro_rules! acceptance_check {
+            ($result:expr) => {
+                if let Err(error) = $result {
+                    eprintln!("[ISSUE46_FAILURE] {error}");
+                    failures.push(error.to_string());
+                }
+            };
+        }
+
+        acceptance_check!(assert_tensor_close_atol_rtol(
             "F16/F32 frame1 low-res logits",
             &f16_snapshot.frame1_low_res_logits,
             &f32_snapshot.frame1_low_res_logits,
             F16_VS_F32_MASK_LOGIT_TOLERANCE,
-        )?;
-        assert_tensor_close_atol_rtol(
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
             "F16/F32 frame1 high-res logits",
             &f16_snapshot.frame1_high_res_logits,
             &f32_snapshot.frame1_high_res_logits,
             F16_VS_F32_MASK_LOGIT_TOLERANCE,
-        )?;
-        assert_tensor_close_atol_rtol(
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
             "F16/F32 frame1 object score logits",
             &f16_snapshot.frame1_object_score_logits,
             &f32_snapshot.frame1_object_score_logits,
             F16_VS_F32_OBJECT_SCORE_TOLERANCE,
-        )?;
-        assert_tensor_close_atol_rtol(
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
             "F16/F32 frame1 object pointer",
             &f16_snapshot.frame1_obj_ptr,
             &f32_snapshot.frame1_obj_ptr,
             F16_VS_F32_OBJ_PTR_TOLERANCE,
-        )?;
-        assert_tensor_close_atol_rtol(
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
             "F16/F32 frame1 mask-memory features",
             &f16_snapshot.frame1_maskmem_features,
             &f32_snapshot.frame1_maskmem_features,
             F16_VS_F32_MASKMEM_TOLERANCE,
-        )?;
-        assert_tensor_close_atol_rtol(
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
             "F16/F32 frame1 mask-memory position encoding",
             &f16_snapshot.frame1_maskmem_pos_enc,
             &f32_snapshot.frame1_maskmem_pos_enc,
             F16_VS_F32_MASKMEM_TOLERANCE,
-        )?;
-        assert_binary_mask_metrics(
+        ));
+        acceptance_check!(assert_binary_mask_metrics(
             "F16/F32 frame 0 output",
             &f16_snapshot.frame0_mask,
             &f32_snapshot.frame0_mask,
             F16_VS_F32_MIN_BINARY_IOU,
             F16_VS_F32_MAX_PIXEL_DELTA_RATE,
-        )?;
-        assert_binary_mask_metrics(
+        ));
+        acceptance_check!(assert_binary_mask_metrics(
             "F16/F32 frame 1 output",
             &f16_snapshot.frame1_mask,
             &f32_snapshot.frame1_mask,
             F16_VS_F32_MIN_BINARY_IOU,
             F16_VS_F32_MAX_PIXEL_DELTA_RATE,
-        )?;
+        ));
 
         let bundle = "reference_video_point_debug_single_click";
         let facebook_low_res = reference_record_tensor(
@@ -812,19 +822,28 @@
                 CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE,
             ),
         ] {
-            assert_tensor_close_atol_rtol(label, actual, expected, tolerance)?;
+            acceptance_check!(assert_tensor_close_atol_rtol(
+                label, actual, expected, tolerance
+            ));
         }
         for (label, actual) in [
             ("F32/Facebook frame 1 output", &f32_snapshot.frame1_mask),
             ("F16/Facebook frame 1 output", &f16_snapshot.frame1_mask),
         ] {
-            assert_binary_mask_metrics(
+            acceptance_check!(assert_binary_mask_metrics(
                 label,
                 actual,
                 &facebook_mask,
                 CANDLE_VS_FACEBOOK_MIN_BINARY_IOU,
                 CANDLE_VS_FACEBOOK_MAX_PIXEL_DELTA_RATE,
-            )?;
+            ));
+        }
+        if !failures.is_empty() {
+            candle::bail!(
+                "Issue #46 conditioned-frame CUDA fixture failed {} declared gate(s):\n{}",
+                failures.len(),
+                failures.join("\n")
+            );
         }
         Ok(())
     }
