@@ -608,7 +608,17 @@
             frame0_mask: to_cpu(&frame0_object.masks)?,
             frame1_mask: to_cpu(&frame1_object.masks)?,
             frame1_low_res_logits: to_cpu(&frame1_state.low_res_masks)?,
-            frame1_high_res_logits: to_cpu(&frame1_object.mask_logits)?,
+            // Public video outputs intentionally rebuild `mask_logits` from
+            // the thresholded output mask. Recover the semantically matching
+            // raw tracker high-resolution logits from the retained raw
+            // low-resolution state instead.
+            frame1_high_res_logits: to_cpu(
+                &frame1_state.low_res_masks.upsample_bilinear2d(
+                    tracker.config().image_size,
+                    tracker.config().image_size,
+                    false,
+                )?,
+            )?,
             frame1_obj_ptr: to_cpu(&frame1_state.obj_ptr)?,
             frame1_object_score_logits: to_cpu(&frame1_state.object_score_logits)?,
             frame1_maskmem_features: to_cpu(

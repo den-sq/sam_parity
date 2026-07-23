@@ -25,8 +25,10 @@ The ignored, serial
 - rejects NaN or infinity in output masks, mask logits, object-score logits,
   object pointers, mask-memory features, and mask-memory position encodings;
 - compares F16 to F32 and both Candle modes to the recorded Facebook tensors.
-  Facebook high-resolution logits are resized to the source-video dimensions
-  with the same non-aligned bilinear operation used by output postprocessing.
+  Raw high-resolution logits are derived from each retained raw low-resolution
+  tracker state with the same non-aligned bilinear operation used by the
+  tracker. Public video-output `mask_logits` are deliberately excluded because
+  output postprocessing rebuilds them from thresholded binary masks.
 
 The private checkpoint and large Facebook tensor payload remain external. The
 test code, fixture identity, tensor selection, and tolerances are committed.
