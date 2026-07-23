@@ -4,8 +4,8 @@ Tracking issue: <https://github.com/den-sq/sam_parity/issues/35>
 
 ## Candidate and ancestry
 
-- Candle candidate: `2cf6179b4f10b9ddfb973f1b154931f68e7a9f56`
-- Plugin candidate: `dd03d0842f087a166e7000ee155c7512b9db00bf`
+- Candle candidate: `5e6b14d78bb867578cde277c4ed6d086501a66ed`
+- Plugin candidate: `0b139838fccdb98de5b110cda339313c8c68b519`
 - Required Candle 0.11 integration merge: `c11c900354467d50985a78a1895945199c9f4ecb`
 - Integration parents: fork `8fb0a15e148353129d76987bbfd5f751f8c336d9`, accepted integration branch `71fad7110bcd1d861102ef256a76eeeac1300bce`
 - `git merge-base --is-ancestor c11c9003 2cf6179b` succeeds.
@@ -18,7 +18,12 @@ The candidate includes the merged changes from:
 
 <https://github.com/den-sq/sam_parity/issues/42> is explicitly excluded and remains deferred until after <https://github.com/den-sq/sam_parity/issues/36>. Its draft branches are not ancestors of either candidate SHA.
 
-The plugin candidate is stacked on progress/reconnect commit `43203f2e7a5f27e4d39dfa1c9736dc1c050fc51a` from <https://github.com/den-sq/sam_parity/issues/38>; that dependency must land first or the candidate must be rebased without changing the certified runtime content.
+The progress/reconnect dependency from
+<https://github.com/den-sq/sam_parity/issues/38> merged through
+<https://github.com/ChengLabResearch/ouroboros_autoseg_plugin/pull/49> at merge
+`7239c9c70061c3e380e04eb647d21f7304870425`. The plugin candidate contains both
+that merge and accepted AC6 coverage commit
+`0e8196276289c2a4cb27258fb6fa09a2e5b1a575`.
 
 ## Selected configuration
 
@@ -36,8 +41,9 @@ F16 compute is rejected. It did not complete the eight-frame video fixture after
 
 ## Pre-selection retained-dtype certification
 
-These pre-selection CPU-offload runs used plugin
-`e41b1ca8e4c4626b522c2ac72519f9a9141e773a` and:
+These pre-selection CPU-offload runs used Candle
+`2cf6179b4f10b9ddfb973f1b154931f68e7a9f56`, plugin
+`e41b1ca8e4c4626b522c2ac72519f9a9141e773a`, and:
 
 - image `sha256:67956d26e644e3ca620243283647165832b73156cddeee7221429cb1fec4b4f1`
 - eight `200 x 200` frames derived from the private representative Medical-SAM3 fixture
@@ -64,15 +70,22 @@ BF16 retained storage saved 5,308,416 bytes (22.2%) of tracker-state CPU memory 
 0.9999686619, 0.9999687373, 1.0, 0.9994762140
 ```
 
-This is a favorable storage tradeoff, but it is not selected for the provisional
-default because the F32 GPU-resident controls are byte-identical and remain
-comfortably within the VRAM gate.
+This is a favorable CPU-offload storage tradeoff, but it is not selected for the
+provisional default because the F32 GPU-resident controls are byte-identical and
+remain comfortably within the VRAM gate. This table does not certify
+GPU-resident BF16 storage. The final Candle candidate fixes GPU-resident retained
+storage semantics, but that optional control requires fresh parity/performance
+evidence before it can be selected.
 
 ## Bounded GPU-resident selection
 
-The exact Candle candidate and pre-default plugin image were run on a repeated
-64-frame medical fixture with F32 compute, F32 retained state, feature cache 1,
-trim enabled, a 32-state non-conditioning bound, and hotstart delay 0.
+The immediate predecessor Candle/plugin candidate was run on a repeated 64-frame
+medical fixture with F32 compute, F32 retained state, feature cache 1, trim
+enabled, a 32-state non-conditioning bound, and hotstart delay 0. The final
+candidate changes only GPU-resident BF16 storage semantics, test coverage, and
+the accepted progress/reconnect ancestry; it does not change this selected F32
+runtime path. These results are therefore carried-forward selection evidence,
+not an exact-final-SHA CUDA run.
 
 | Profile | Propagation | Peak reported VRAM | Output SHA-256 |
 |---|---:|---:|---|
@@ -119,13 +132,24 @@ Completed verification:
   including default/fallback parsing and video lifecycle coverage.
 - `sam_parity` workspace tests: 16 passed, 10 fixture investigations ignored; contract tests 3 passed.
 - `cargo test -p sam3-parity-cli --features full-parity --no-run`: passed.
-- Exact-SHA F32/BF16 and F32/F32 GPU smokes: passed geometry, binary-output, CUDA-device, image-revision, and checkpoint-revision checks.
+- Pre-selection predecessor-SHA F32/BF16 and F32/F32 GPU smokes: passed
+  geometry, binary-output, CUDA-device, image-revision, and checkpoint-revision
+  checks; their CPU-offload scope is recorded above.
+- Final Candle head regression:
+  `retained_maskmem_dtype_is_applied_independently_of_storage_device` passed,
+  the SAM3 video suite passed 22/22, and the CUDA 12.4 / compute-capability 7.5
+  build passed after compiling 11 PTX and 15 CUDA kernels.
+- Final plugin head against the final Candle worktree: backend library tests
+  passed 78/78; frontend reconnect tests passed 4/4; lint passed. The accepted
+  initial-hotstart reconnect tests from
+  <https://github.com/ChengLabResearch/ouroboros_autoseg_plugin/pull/49> remain
+  present.
 
 ## Freeze disposition
 
 The proposed provisional freeze is Candle
-`2cf6179b4f10b9ddfb973f1b154931f68e7a9f56` plus plugin
-`dd03d0842f087a166e7000ee155c7512b9db00bf`, selecting bounded GPU-resident F32
+`5e6b14d78bb867578cde277c4ed6d086501a66ed` plus plugin
+`0b139838fccdb98de5b110cda339313c8c68b519`, selecting bounded GPU-resident F32
 compute and retained state. CPU offload and BF16 retained storage remain explicit
 fallback/benchmark controls. <https://github.com/den-sq/sam_parity/issues/35>
 should remain open until sustained throughput can be measured without the host

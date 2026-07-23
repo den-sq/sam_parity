@@ -3,7 +3,7 @@ name: Nightly Video Parity
 env:
   # Temporary stacked-candidate pin. Return to main after candle_sam3 PR #9 lands.
   CANDLE_SAM3_BRANCH: codex/candle-2-09-throughput-candidate
-  CANDLE_SAM3_SHA: 2cf6179b4f10b9ddfb973f1b154931f68e7a9f56
+  CANDLE_SAM3_SHA: 5e6b14d78bb867578cde277c4ed6d086501a66ed
 
 on:
   workflow_dispatch:
