@@ -730,12 +730,16 @@
             1,
             "track_step_output.pred_masks",
         )?;
-        let facebook_high_res = reference_record_tensor(
+        let facebook_high_res_model = reference_record_tensor(
             bundle,
             "track_step",
             1,
             "track_step_output.pred_masks_high_res",
         )?;
+        let (_batch, _channels, output_height, output_width) =
+            f32_snapshot.frame1_high_res_logits.dims4()?;
+        let facebook_high_res =
+            facebook_high_res_model.upsample_bilinear2d(output_height, output_width, false)?;
         let facebook_obj_ptr = reference_record_tensor(
             bundle,
             "track_step",
