@@ -4,11 +4,11 @@ Tracking issue: <https://github.com/den-sq/sam_parity/issues/35>
 
 ## Candidate and ancestry
 
-- Candle candidate: `5e6b14d78bb867578cde277c4ed6d086501a66ed`
-- Plugin candidate: `0b139838fccdb98de5b110cda339313c8c68b519`
+- Candle candidate: `8989bedb1124032afa79fd9397d38d46fd173433`
+- Plugin candidate: `857eac5ed1341a116222912ca763ec59709f381f`
 - Required Candle 0.11 integration merge: `c11c900354467d50985a78a1895945199c9f4ecb`
 - Integration parents: fork `8fb0a15e148353129d76987bbfd5f751f8c336d9`, accepted integration branch `71fad7110bcd1d861102ef256a76eeeac1300bce`
-- `git merge-base --is-ancestor c11c9003 2cf6179b` succeeds.
+- `git merge-base --is-ancestor c11c9003 8989bedb` succeeds.
 - The mixed `issue-10-encoder-drift` branch is excluded.
 
 The candidate includes the merged changes from:
@@ -74,18 +74,22 @@ This is a favorable CPU-offload storage tradeoff, but it is not selected for the
 provisional default because the F32 GPU-resident controls are byte-identical and
 remain comfortably within the VRAM gate. This table does not certify
 GPU-resident BF16 storage. The final Candle candidate fixes GPU-resident retained
-storage semantics, but that optional control requires fresh parity/performance
-evidence before it can be selected.
+storage semantics and casts packed retained features back to compute dtype on
+read. BF16 remains an opt-in control that requires fresh parity/performance
+evidence before selection; F32 is the library, example, plugin, and parity-CLI
+default.
 
 ## Bounded GPU-resident selection
 
 The immediate predecessor Candle/plugin candidate was run on a repeated 64-frame
 medical fixture with F32 compute, F32 retained state, feature cache 1, trim
 enabled, a 32-state non-conditioning bound, and hotstart delay 0. The final
-candidate changes only GPU-resident BF16 storage semantics, test coverage, and
-the accepted progress/reconnect ancestry; it does not change this selected F32
-runtime path. These results are therefore carried-forward selection evidence,
-not an exact-final-SHA CUDA run.
+candidate adds the BF16 packed-history cast-on-read boundary, makes the selected
+F32 retained dtype the public default, restores blank-frame confirmation-reset
+semantics, and adds coverage. On the selected F32 configuration the new
+cast-on-read is an equal-dtype no-op, the confirmation gate is disabled, and
+plugin configuration was already explicit F32. These results are therefore
+carried-forward selection evidence, not an exact-final-SHA throughput run.
 
 | Profile | Propagation | Peak reported VRAM | Output SHA-256 |
 |---|---:|---:|---|
@@ -108,13 +112,22 @@ That run is memory evidence only, not valid sustained-throughput evidence.
 The Candle candidate:
 
 - selects model compute dtype at load and preserves it across image, attention, prompt, tracker, and mask-memory boundaries;
-- stores retained mask-memory in the selected storage dtype and casts it on read;
+- stores retained mask-memory in the selected storage dtype and casts both packed and unpacked memory back to compute dtype on read;
 - skips non-overlap score extraction unless multiple visible objects require it;
 - skips confirmation-score reads when the confirmation gate is disabled;
-- tensorizes multi-object score ranking and binary threshold reconstruction;
+- tensorizes multi-object score ranking and binary threshold reconstruction, normalizing narrow score tensors to F32 before ranking;
 - removes duplicate foreground checks on the ordinary single-object path.
 
 Both accepted eight-frame runs recorded `postprocess_score_scalar_reads=0` and `postprocess_foreground_scalar_reads=8`. The remaining foreground read is one required output-presence decision per frame; disabled/single-object non-overlap adds no score reads.
+
+When the optional confirmation gate is enabled, blank frames still update and
+reset the confirmation streak before being filtered, preserving the prior state
+machine. Enabling output non-overlap with one visible object produces the same
+binary-mask reconstruction as the ordinary path; this corrects the former
+single-object raw-mask special case. Mixed-precision boundaries also include
+explicit attention-output, image-input, prompt-encoder, F32 Q/K/V-softmax, and
+mask-memory-backbone weight alignment casts; equal-dtype F32 calls are no-op
+clones.
 
 Two-frame backbone batching was not selected. The candidate already fits the VRAM gate, and batching was not justified by synchronized evidence before freeze.
 
@@ -124,21 +137,22 @@ The plugin uses `0.11.0` for `candle-core`, `candle-nn`, and `candle-transformer
 
 Completed verification:
 
-- `cargo test -p candle-transformers sam3::video`: 21 passed at the final Candle candidate.
-- `cargo test -p candle-transformers --lib`: passed earlier in the candidate stack; the final additions are covered by the focused suite, including an F16 CPU-mask-cleanup regression.
+- `cargo test -p candle-transformers sam3::video`: 22 passed at final Candle `8989bedb`.
+- `cargo test -p candle-transformers --lib`: 50 passed, 3 ignored at final Candle `8989bedb`.
 - `CUDARC_CUDA_VERSION=12040 CUDA_COMPUTE_CAP=75 cargo check -p candle-transformers --features cuda`: passed for the candidate stack (11 PTX and 15 CUDA kernels).
-- Plugin `cargo test` against the candidate Candle worktree: 77 passed; annotation contract passed; checkpoint-load test ignored unless a private checkpoint path is supplied.
+- Plugin `cargo test` at predecessor plugin `dd03d084` against the then-current candidate Candle worktree: 77 passed; annotation contract passed; checkpoint-load test ignored unless a private checkpoint path is supplied.
 - Focused plugin Candle-SAM3 module after changing the defaults: 13 passed,
   including default/fallback parsing and video lifecycle coverage.
 - `sam_parity` workspace tests: 16 passed, 10 fixture investigations ignored; contract tests 3 passed.
-- `cargo test -p sam3-parity-cli --features full-parity --no-run`: passed.
+- `cargo test -p sam3-parity-cli --features full-parity --no-run`: compile-only check passed; the private-fixture video parity test was not executed.
 - Pre-selection predecessor-SHA F32/BF16 and F32/F32 GPU smokes: passed
   geometry, binary-output, CUDA-device, image-revision, and checkpoint-revision
   checks; their CPU-offload scope is recorded above.
-- Final Candle head regression:
-  `retained_maskmem_dtype_is_applied_independently_of_storage_device` passed,
-  the SAM3 video suite passed 22/22, and the CUDA 12.4 / compute-capability 7.5
-  build passed after compiling 11 PTX and 15 CUDA kernels.
+- Final Candle head regressions: the packed BF16-to-F32 cast-on-read test and
+  caller-level CPU retained-storage test passed; the SAM3 video suite passed
+  22/22; the full library passed 50 with 3 ignored; and the CUDA-gated
+  retained-storage test passed on compute capability 7.5 after compiling 11 PTX
+  and 15 CUDA kernels under CUDA 12.4.
 - Final plugin head against the final Candle worktree: backend library tests
   passed 78/78; frontend reconnect tests passed 4/4; lint passed. The accepted
   initial-hotstart reconnect tests from
@@ -148,8 +162,8 @@ Completed verification:
 ## Freeze disposition
 
 The proposed provisional freeze is Candle
-`5e6b14d78bb867578cde277c4ed6d086501a66ed` plus plugin
-`0b139838fccdb98de5b110cda339313c8c68b519`, selecting bounded GPU-resident F32
+`8989bedb1124032afa79fd9397d38d46fd173433` plus plugin
+`857eac5ed1341a116222912ca763ec59709f381f`, selecting bounded GPU-resident F32
 compute and retained state. CPU offload and BF16 retained storage remain explicit
 fallback/benchmark controls. <https://github.com/den-sq/sam_parity/issues/35>
 should remain open until sustained throughput can be measured without the host
