@@ -492,7 +492,7 @@
             Box::new(source),
             VideoSessionOptions {
                 retained_state_dtype: sam3::RetainedStateDType::BF16,
-                max_non_cond_tracker_states: Some(8),
+                max_non_cond_tracker_states: Some(16),
                 ..VideoSessionOptions::default()
             },
         )?;

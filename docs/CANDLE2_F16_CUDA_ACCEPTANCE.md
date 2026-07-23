@@ -20,6 +20,7 @@ The ignored, serial
 - processes prompted frame 0 and non-prompt frame 1;
 - requires frame 1 to retain frame 0 as its conditioning prompt;
 - retains mask-memory features in BF16, matching the throughput candidate;
+- caps non-conditioning tracker history at the tracker-required minimum of 16;
 - requires the model and tracker compute dtypes to equal the requested dtype;
 - rejects NaN or infinity in output masks, mask logits, object-score logits,
   object pointers, mask-memory features, and mask-memory position encodings;
