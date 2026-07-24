@@ -1,9 +1,9 @@
 name: Nightly Video Parity
 
 env:
-  # den-sq/sam_parity#47 certifies the F16 candidate at this exact reachable revision.
-  CANDLE_SAM3_BRANCH: codex/candle-2-13-f16-turing
-  CANDLE_SAM3_SHA: 95e0c186cdf7a7d51224659a103ce73294b7efad
+  # den-sq/candle_sam3#10 merged the certified F16 candidate at this exact main revision.
+  CANDLE_SAM3_BRANCH: main
+  CANDLE_SAM3_SHA: 32882747726e4803af494a6e67f47098f45c9893
 
 on:
   workflow_dispatch:
