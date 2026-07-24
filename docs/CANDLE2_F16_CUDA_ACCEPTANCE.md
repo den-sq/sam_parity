@@ -10,6 +10,15 @@ checkpoint-backed CUDA fixture. A failing result must be preserved and
 investigated; these thresholds must not be tuned to make a new result pass
 without a recorded numerical justification.
 
+## Contract status
+
+The thresholds below remain the original implemented elementwise contract.
+They are **not** the tensor-specific replacement contract now required by
+`den-sq/sam_parity#46`. That amendment must separately declare mask-logit,
+mask-memory, and relative F32/Facebook non-regression metrics and thresholds
+before an independent confirmation run. The diagnostic recording used to
+choose the amendment must not also serve as the passing confirmation.
+
 ## Conditioned-frame integration fixture
 
 The ignored, serial
