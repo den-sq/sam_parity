@@ -1,9 +1,11 @@
 # CANDLE-2.13 F16 CUDA acceptance contract
 
 Date declared: 2026-07-23
+Disposition updated: 2026-07-24
 
-Scope: `den-sq/sam_parity#46` and the draft F16 implementation in
-`den-sq/candle_sam3#10`.
+Scope: `den-sq/sam_parity#46` and the merged F16 implementation from
+`den-sq/candle_sam3#10` at
+`95e0c186cdf7a7d51224659a103ce73294b7efad`.
 
 This file declares the correctness thresholds before running the committed
 checkpoint-backed CUDA fixture. A failing result must be preserved and
@@ -12,12 +14,27 @@ without a recorded numerical justification.
 
 ## Contract status
 
-The thresholds below remain the original implemented elementwise contract.
-They are **not** the tensor-specific replacement contract now required by
-`den-sq/sam_parity#46`. That amendment must separately declare mask-logit,
-mask-memory, and relative F32/Facebook non-regression metrics and thresholds
-before an independent confirmation run. The diagnostic recording used to
-choose the amendment must not also serve as the passing confirmation.
+The thresholds below remain the original implemented elementwise diagnostic
+contract. They deliberately preserve the conditioned-frame failures and remain
+useful as tripwires, but they are not asserted to be universal safe limits and
+are not the final F16 approval contract.
+
+The current sparse F16/F32 deviations are provisionally accepted for merging
+the implementation and fixture because the recorded task-output, lifecycle,
+memory, and performance gates pass. This does not certify F16 for consumer
+use.
+
+den-sq/sam_parity#50 first localizes and dispositions the F32/Facebook baseline.
+After that localization, den-sq/sam_parity#52 independently derives
+task-grounded mask-logit and mask-memory targets from predeclared synthetic
+perturbation levels on representative real data. Current F16/F32 and
+Candle/Facebook residuals may be evaluated against those targets only after
+the targets are derived; they must not select the perturbation levels or
+thresholds.
+
+No tolerance below is widened or reinterpreted by this disposition. Final F16
+approval remains with den-sq/sam_parity#46 after the #50 → #52 sequence and
+candidate evaluation.
 
 ## Conditioned-frame integration fixture
 

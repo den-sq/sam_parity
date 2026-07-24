@@ -4,6 +4,11 @@ Last updated: 2026-07-24
 
 Status: **RED — do not enable F16 in the consumer plugin.**
 
+Merge disposition: the implementation and evidence ledger were provisionally
+accepted and merged. Final F16 certification remains gated by
+`den-sq/sam_parity#50`, then `den-sq/sam_parity#52`, then the final
+`den-sq/sam_parity#46` decision.
+
 This report records the current `den-sq/sam_parity#46` acceptance run. It
 preserves failing results rather than widening the predeclared tolerances in
 `CANDLE2_F16_CUDA_ACCEPTANCE.md`.
@@ -118,11 +123,14 @@ tensor.
 | frame-1 binary mask | IoU 0.991147, delta 0.000255 | IoU 0.991346, delta 0.000249 | pass / pass |
 
 The broad intermediate discrepancy is already present in F32 and is therefore
-not caused by enabling F16. Absolute localization and disposition of that F32
-baseline discrepancy now belong to `den-sq/sam_parity#50` and do not block F16
-certification. `den-sq/sam_parity#46` retains the existing absolute Facebook
-binary-mask/output acceptance and requires a predeclared relative
-F32/Facebook intermediate non-regression rule for F16.
+not caused by enabling F16. It did not block merging the implementation or
+fixture evidence, but final F16 certification remains red. Absolute
+localization and disposition of the F32 baseline discrepancy belong to
+`den-sq/sam_parity#50`. After that work completes,
+`den-sq/sam_parity#52` independently calibrates task-grounded tolerances
+without selecting thresholds from the current F16 or F32 residuals. The
+current candidate is evaluated against those targets only after they are
+derived.
 
 For the Facebook logit reference, overall sign agreement remains high while
 the very small near-boundary subsets expose the baseline discrepancy:
@@ -319,9 +327,12 @@ not been isolated and remains a documented caveat.
 
 ## CI scope
 
-Both workflows now clone the reachable candle_sam3 branch
-`codex/candle-2-13-f16-turing` and verify exact SHA
-`95e0c186cdf7a7d51224659a103ce73294b7efad`.
+At the time of this run, both workflows cloned the reachable candle_sam3
+feature branch and verified exact SHA
+`95e0c186cdf7a7d51224659a103ce73294b7efad`. After
+`den-sq/candle_sam3#10` merged, the workflows were repointed to `main` and now
+verify exact merge revision
+`32882747726e4803af494a6e67f47098f45c9893`.
 
 The ordinary Rust CI jobs are CPU/default-feature jobs. They neither compile
 nor run the `full-parity,cuda` fixture paths. The current nightly job also
@@ -334,22 +345,22 @@ certification evidence.
 
 ## Remaining red gates
 
-1. Amend the committed acceptance contract with tensor-specific F16/F32
-   intermediate metrics and thresholds plus a predeclared relative
-   F32/Facebook non-regression rule. The current recording may justify the
-   metric shape but must not both select and pass the replacement thresholds.
-2. Run an independent reachable-head confirmation after that contract is
-   frozen.
-3. Record the final green-certification or no-ship decision, including exact
-   revisions and the supported configuration.
+1. Complete F32/Facebook intermediate localization and disposition in
+   `den-sq/sam_parity#50`.
+2. After `den-sq/sam_parity#50`, independently calibrate task-grounded
+   intermediate/output tolerance targets in `den-sq/sam_parity#52` by
+   injecting proposed perturbation levels that are not selected from the
+   current F16 or F32 residuals.
+3. Evaluate the current F16 candidate against those independently derived
+   targets and record any required fallback or performance effect.
+4. Record the final green-certification or no-ship decision, including exact
+   revisions and the supported configuration, in `den-sq/sam_parity#46`.
 
-Absolute F32/Facebook intermediate localization is tracked separately in
-`den-sq/sam_parity#50`. Paired per-kernel duration and host-RSS attribution are
-non-blocking follow-up work in `den-sq/sam_parity#51`. Consumer activation is
-owned by `ChengLabResearch/ouroboros_autoseg_plugin#52` only after a green
-decision.
-
-This PR may be reviewed and merged as the committed fixture and evidence
-ledger while certification remains red. The consumer plugin must continue
-rejecting `SAM3_COMPUTE_DTYPE=f16` until `den-sq/sam_parity#46` records a green
-decision and the separate activation work is completed.
+These remaining gates did not block merging `den-sq/candle_sam3#10` or
+`den-sq/sam_parity#47` under provisional implementation acceptance. Paired
+per-kernel duration and host-RSS attribution are non-blocking follow-up work
+in `den-sq/sam_parity#51`. Consumer activation is owned by
+`ChengLabResearch/ouroboros_autoseg_plugin#52` only after a green decision.
+The consumer plugin must continue rejecting `SAM3_COMPUTE_DTYPE=f16` until
+`den-sq/sam_parity#46` records that decision and the separate activation work
+is completed.
