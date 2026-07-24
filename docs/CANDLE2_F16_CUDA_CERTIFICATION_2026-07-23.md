@@ -118,9 +118,11 @@ tensor.
 | frame-1 binary mask | IoU 0.991147, delta 0.000255 | IoU 0.991346, delta 0.000249 | pass / pass |
 
 The broad intermediate discrepancy is already present in F32 and is therefore
-not caused by enabling F16. It still blocks `den-sq/sam_parity#46` until the
-F32 strict-port baseline discrepancy is explained or the acceptance contract
-is deliberately revised with numerical justification.
+not caused by enabling F16. Absolute localization and disposition of that F32
+baseline discrepancy now belong to `den-sq/sam_parity#50` and do not block F16
+certification. `den-sq/sam_parity#46` retains the existing absolute Facebook
+binary-mask/output acceptance and requires a predeclared relative
+F32/Facebook intermediate non-regression rule for F16.
 
 For the Facebook logit reference, overall sign agreement remains high while
 the very small near-boundary subsets expose the baseline discrepancy:
@@ -171,6 +173,13 @@ profiler wrapper:
 | --- | ---: | ---: | ---: | ---: |
 | F16 workflow matrix | 67.70 s | 635,284 KiB (620.39 MiB) | 0 | 0 |
 | sequential F32 + F16 conditioned frame | 26.93 s | 670,556 KiB (654.84 MiB) | 0 | 101 (expected) |
+
+An earlier pre-rebase capture recorded 621.97 MiB for the F16 workflow and
+649.69 MiB for sequential F32 + F16 conditioned execution. Those are separate
+process-RSS captures, not alternate readings from the exact-head run above.
+The 1.58 MiB lower workflow value and 5.15 MiB higher conditioned value in the
+exact-head rerun are treated as ordinary host-RSS variability; neither pair
+shows retained per-frame growth.
 
 The previously reported multi-gigabyte host RSS high-water is not reproduced
 when the model process is measured directly. These runs indicate that the
@@ -240,7 +249,10 @@ Candle kernels is 532 launches. The report independently records 532
 that the equal counts have the same cause. The unnamed launches are inferred
 to be library/custom-module activity outside Candle's direct module loader.
 Kernel names and API-side time are therefore attributed, but per-kernel GPU
-duration remains unavailable on this host.
+duration remains unavailable on this host. The recorded operator/kernel/API
+attribution satisfies `den-sq/sam_parity#46`'s original "Nsight or equivalent"
+requirement. Paired F32/F16 per-kernel duration on a trace-capable host is
+non-blocking follow-up work in `den-sq/sam_parity#51`.
 
 ## Final-head throughput, memory, and output evidence
 
@@ -291,6 +303,11 @@ Output SHA-256 values:
 | 128 | `727e02e688e565d4d8384ec2b05d704256d20e41f0a997c014c4ad32c21fa2ca` | `6b24aa65ea4d2b4b852dfed5336e872ce63d6007561912605cae1745a68afefa` |
 | 512 | `cdc4408b8629fed7dbc2d8124cb39f38ceb0685268ac5e13c2288f8197795653` | `1a7f611771858285995e1eb9019d498756fb75f7db96aa32090a844303c3764c` |
 
+All six output hashes exactly reproduce the corresponding pre-rebase
+recordings. Propagation time moved upward by 0.24–1.31% and sampled peak VRAM
+by 0.82–1.58% between the two run sets. The within-run F16/F32 comparisons are
+the acceptance measurements; this small cross-run drift affects no gate.
+
 The 32-frame F32 hash also exactly matches the separately recorded
 pre-accounting control, showing that the accounting fix did not alter output.
 
@@ -317,13 +334,22 @@ certification evidence.
 
 ## Remaining red gates
 
-1. Explain or deliberately disposition the sparse F16/F32 intermediate
-   outliers without tuning thresholds to this result.
-2. Explain the much broader F32/Facebook strict-port intermediate discrepancy;
-   F16 cannot pass a Facebook envelope that F32 already fails.
-3. If per-kernel GPU duration is mandatory rather than equivalent
-   kernel/operator/API attribution, rerun the committed workload on a host
-   where Nsight GPU kernel tracing is supported.
+1. Amend the committed acceptance contract with tensor-specific F16/F32
+   intermediate metrics and thresholds plus a predeclared relative
+   F32/Facebook non-regression rule. The current recording may justify the
+   metric shape but must not both select and pass the replacement thresholds.
+2. Run an independent reachable-head confirmation after that contract is
+   frozen.
+3. Record the final green-certification or no-ship decision, including exact
+   revisions and the supported configuration.
 
-Until those gates pass, the PR remains draft and the consumer plugin must
-continue rejecting `SAM3_COMPUTE_DTYPE=f16`.
+Absolute F32/Facebook intermediate localization is tracked separately in
+`den-sq/sam_parity#50`. Paired per-kernel duration and host-RSS attribution are
+non-blocking follow-up work in `den-sq/sam_parity#51`. Consumer activation is
+owned by `ChengLabResearch/ouroboros_autoseg_plugin#52` only after a green
+decision.
+
+This PR may be reviewed and merged as the committed fixture and evidence
+ledger while certification remains red. The consumer plugin must continue
+rejecting `SAM3_COMPUTE_DTYPE=f16` until `den-sq/sam_parity#46` records a green
+decision and the separate activation work is completed.
