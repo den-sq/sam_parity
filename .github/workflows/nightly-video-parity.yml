@@ -1,9 +1,9 @@
 name: Nightly Video Parity
 
 env:
-  # Temporary stacked-candidate pin. Return to main after candle_sam3 PR #9 lands.
-  CANDLE_SAM3_BRANCH: codex/candle-2-09-throughput-candidate
-  CANDLE_SAM3_SHA: 8989bedb1124032afa79fd9397d38d46fd173433
+  # PR #47's CUDA fixtures certify the F16 candidate at this exact reachable revision.
+  CANDLE_SAM3_BRANCH: codex/candle-2-13-f16-turing
+  CANDLE_SAM3_SHA: 95e0c186cdf7a7d51224659a103ce73294b7efad
 
 on:
   workflow_dispatch:

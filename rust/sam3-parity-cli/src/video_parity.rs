@@ -324,6 +324,8 @@
     const CANDLE_VS_FACEBOOK_MIN_BINARY_IOU: f32 = 0.97;
     #[cfg(feature = "cuda")]
     const CANDLE_VS_FACEBOOK_MAX_PIXEL_DELTA_RATE: f32 = 0.01;
+    #[cfg(feature = "cuda")]
+    const ISSUE46_NEAR_BOUNDARY_REFERENCE_ABS_MAX: f32 = 0.5;
 
     #[cfg(feature = "cuda")]
     fn assert_all_finite(label: &str, tensor: &Tensor) -> Result<()> {
@@ -388,13 +390,36 @@
             .sum_all()?
             .to_vec0::<f32>()? as usize;
         let violation_rate = violation_count as f32 / diff.elem_count() as f32;
+        let actual_values = actual.flatten_all()?.to_vec1::<f32>()?;
+        let expected_values = expected.flatten_all()?.to_vec1::<f32>()?;
+        let mut sign_agreement_count = 0usize;
+        let mut near_boundary_count = 0usize;
+        let mut near_boundary_sign_agreement_count = 0usize;
+        let mut near_boundary_max_abs_diff = 0f32;
+        for (&actual, &expected) in actual_values.iter().zip(&expected_values) {
+            let signs_agree = (actual >= 0.0) == (expected >= 0.0);
+            sign_agreement_count += usize::from(signs_agree);
+            if expected.abs() <= ISSUE46_NEAR_BOUNDARY_REFERENCE_ABS_MAX {
+                near_boundary_count += 1;
+                near_boundary_sign_agreement_count += usize::from(signs_agree);
+                near_boundary_max_abs_diff =
+                    near_boundary_max_abs_diff.max((actual - expected).abs());
+            }
+        }
+        let sign_agreement_rate = sign_agreement_count as f32 / diff.elem_count() as f32;
+        let near_boundary_sign_agreement_rate = if near_boundary_count == 0 {
+            1.0
+        } else {
+            near_boundary_sign_agreement_count as f32 / near_boundary_count as f32
+        };
         eprintln!(
-            "[ISSUE46_TENSOR] label={label:?} atol={} rtol={} max_abs_diff={max_abs_diff:.6} mean_abs_diff={mean_abs_diff:.6} violation_count={violation_count} violation_rate={violation_rate:.8}",
-            tolerance.atol, tolerance.rtol
+            "[ISSUE46_TENSOR] label={label:?} atol={} rtol={} max_abs_diff={max_abs_diff:.6} mean_abs_diff={mean_abs_diff:.6} violation_count={violation_count} violation_rate={violation_rate:.8} sign_agreement_rate={sign_agreement_rate:.8} near_boundary_reference_abs_max={ISSUE46_NEAR_BOUNDARY_REFERENCE_ABS_MAX:.6} near_boundary_count={near_boundary_count} near_boundary_max_abs_diff={near_boundary_max_abs_diff:.6} near_boundary_sign_agreement_rate={near_boundary_sign_agreement_rate:.8}",
+            tolerance.atol,
+            tolerance.rtol,
         );
         if max_excess > 0.0 {
             candle::bail!(
-                "{label} exceeded atol={} rtol={}: max_abs_diff={max_abs_diff:.6}, mean_abs_diff={mean_abs_diff:.6}, max_excess={max_excess:.6}, violation_count={violation_count}, violation_rate={violation_rate:.8}",
+                "{label} exceeded atol={} rtol={}: max_abs_diff={max_abs_diff:.6}, mean_abs_diff={mean_abs_diff:.6}, max_excess={max_excess:.6}, violation_count={violation_count}, violation_rate={violation_rate:.8}, sign_agreement_rate={sign_agreement_rate:.8}, near_boundary_reference_abs_max={ISSUE46_NEAR_BOUNDARY_REFERENCE_ABS_MAX:.6}, near_boundary_count={near_boundary_count}, near_boundary_max_abs_diff={near_boundary_max_abs_diff:.6}, near_boundary_sign_agreement_rate={near_boundary_sign_agreement_rate:.8}",
                 tolerance.atol,
                 tolerance.rtol
             );
