@@ -3,7 +3,7 @@ name: Rust CI
 env:
   # Temporary stacked-candidate pin. Return to main after candle_sam3 PR #9 lands.
   CANDLE_SAM3_BRANCH: codex/candle-2-09-throughput-candidate
-  CANDLE_SAM3_SHA: 8989bedb1124032afa79fd9397d38d46fd173433
+  CANDLE_SAM3_SHA: 71690361a0e4eb839cfc22a52fcdf5cfbf047f0a
 
 on:
   pull_request:
