@@ -1,7 +1,7 @@
 name: Rust CI
 
 env:
-  # PR #47's CUDA fixtures certify the F16 candidate at this exact reachable revision.
+  # den-sq/sam_parity#47 certifies the F16 candidate at this exact reachable revision.
   CANDLE_SAM3_BRANCH: codex/candle-2-13-f16-turing
   CANDLE_SAM3_SHA: 95e0c186cdf7a7d51224659a103ce73294b7efad
 
