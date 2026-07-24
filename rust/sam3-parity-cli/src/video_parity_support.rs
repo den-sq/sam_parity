@@ -270,6 +270,17 @@ mod tests {
         tokenizer.exists().then_some(tokenizer)
     }
 
+    fn reference_frame_source(model: &Sam3ImageModel, bundle: &str) -> Result<MediaFrameSource> {
+        let config = model.config();
+        MediaFrameSource::from_path(
+            reference_input_frames_dir(bundle),
+            config.image.image_size,
+            config.image.image_mean,
+            config.image.image_std,
+        )
+        .map_err(|error| candle::Error::Msg(error.to_string()))
+    }
+
     fn reference_bundle_dir(name: &str) -> PathBuf {
         paths::bundle_root().join(name)
     }

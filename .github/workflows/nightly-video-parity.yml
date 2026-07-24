@@ -1,5 +1,10 @@
 name: Nightly Video Parity
 
+env:
+  # Temporary stacked-candidate pin. Return to main after candle_sam3 PR #9 lands.
+  CANDLE_SAM3_BRANCH: codex/candle-2-09-throughput-candidate
+  CANDLE_SAM3_SHA: 71690361a0e4eb839cfc22a52fcdf5cfbf047f0a
+
 on:
   workflow_dispatch:
   schedule:
@@ -11,7 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Clone Candle SAM3 path dependency
-        run: git clone --depth 1 https://github.com/den-sq/candle_sam3 ../candle_sam3
+        run: |
+          git clone --depth 1 --branch "$CANDLE_SAM3_BRANCH" https://github.com/den-sq/candle_sam3 ../candle_sam3
+          test "$(git -C ../candle_sam3 rev-parse HEAD)" = "$CANDLE_SAM3_SHA"
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v6
         with:
