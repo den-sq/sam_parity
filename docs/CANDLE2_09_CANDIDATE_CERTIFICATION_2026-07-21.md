@@ -4,11 +4,11 @@ Tracking issue: <https://github.com/den-sq/sam_parity/issues/35>
 
 ## Candidate and ancestry
 
-- Candle candidate: `8989bedb1124032afa79fd9397d38d46fd173433`
-- Plugin candidate: `857eac5ed1341a116222912ca763ec59709f381f`
+- Candle candidate: `71690361a0e4eb839cfc22a52fcdf5cfbf047f0a`
+- Plugin candidate: `7438668043d5021d016e5e0402012657dab69309`
 - Required Candle 0.11 integration merge: `c11c900354467d50985a78a1895945199c9f4ecb`
 - Integration parents: fork `8fb0a15e148353129d76987bbfd5f751f8c336d9`, accepted integration branch `71fad7110bcd1d861102ef256a76eeeac1300bce`
-- `git merge-base --is-ancestor c11c9003 8989bedb` succeeds.
+- `git merge-base --is-ancestor c11c9003 71690361` succeeds.
 - The mixed `issue-10-encoder-drift` branch is excluded.
 
 The candidate includes the merged changes from:
@@ -75,21 +75,24 @@ provisional default because the F32 GPU-resident controls are byte-identical and
 remain comfortably within the VRAM gate. This table does not certify
 GPU-resident BF16 storage. The final Candle candidate fixes GPU-resident retained
 storage semantics and casts packed retained features back to compute dtype on
-read. BF16 remains an opt-in control that requires fresh parity/performance
-evidence before selection; F32 is the library, example, plugin, and parity-CLI
-default.
+read. The packed execution cache is kept in compute dtype so BF16 retained state
+does not invoke Ampere-only BF16 indexing or copy kernels on the target Turing
+GPU; the authoritative retained tensors remain in the requested storage dtype.
+BF16 remains an opt-in control that requires fresh parity/performance evidence
+before selection; F32 is the library, example, plugin, and parity-CLI default.
 
 ## Bounded GPU-resident selection
 
 The immediate predecessor Candle/plugin candidate was run on a repeated 64-frame
 medical fixture with F32 compute, F32 retained state, feature cache 1, trim
 enabled, a 32-state non-conditioning bound, and hotstart delay 0. The final
-candidate adds the BF16 packed-history cast-on-read boundary, makes the selected
-F32 retained dtype the public default, restores blank-frame confirmation-reset
-semantics, and adds coverage. On the selected F32 configuration the new
-cast-on-read is an equal-dtype no-op, the confirmation gate is disabled, and
-plugin configuration was already explicit F32. These results are therefore
-carried-forward selection evidence, not an exact-final-SHA throughput run.
+candidate adds the BF16 packed-history cast-before-index boundary, keeps the
+packed execution cache in compute dtype, makes the selected F32 retained dtype
+the public default, restores blank-frame confirmation-reset semantics, and adds
+coverage. On the selected F32 configuration the packed conversions are
+equal-dtype no-ops, the confirmation gate is disabled, and plugin configuration
+was already explicit F32. These results are therefore carried-forward selection
+evidence, not an exact-final-SHA throughput run.
 
 | Profile | Propagation | Peak reported VRAM | Output SHA-256 |
 |---|---:|---:|---|
@@ -101,6 +104,16 @@ The matched heat-soaked GPU-resident control used 15.0% less propagation time
 than CPU offload. All runs retained 33 tracker states including 32
 non-conditioning states, and the selected GPU-resident profile remained below
 the 14 GiB gate.
+
+For cross-issue measurement context only, the 512-frame F32 arm on
+<https://github.com/den-sq/candle_sam3/pull/10> measured `0.214482 fps`
+propagation and `0.211483 fps` end-to-end with peak VRAM 10,889 MiB. That run
+used F32 compute with **BF16 retained mask memory**; it is not an exact
+frozen-configuration result for this F32/F32 candidate. Exact selected-
+configuration throughput evidence tops out at the 64-frame A-B-A above
+(318.48 s / 326.59 s, approximately 0.20 fps). The 512-frame result is retained
+only as a configuration-labelled anchor for
+<https://github.com/den-sq/sam_parity/issues/49>.
 
 A 512-frame follow-up held an approximately 10.5 GiB VRAM plateau through 25%
 progress, but it was stopped after the host driver collapsed to P3/300 MHz at
@@ -131,14 +144,31 @@ clones.
 
 Two-frame backbone batching was not selected. The candidate already fits the VRAM gate, and batching was not justified by synchronized evidence before freeze.
 
+## Throughput attribution and target disposition
+
+No material throughput speedup is claimed for this candidate. The separate
+512-frame F32/BF16 measurement above is `+5.1%` against the `0.204 fps` warm
+baseline from <https://github.com/den-sq/sam_parity/issues/30>, and it does not
+use the exact selected retained dtype. The synchronized evidence instead
+attributes the material result to memory behavior: retained history plateaus at
+33 states, the selected configuration remains below the 14 GiB gate, and
+GPU-resident state avoids the measured CPU-offload penalty.
+
+The synthesized `0.68 fps` threshold is retired from this issue. It was derived
+from the pre-existing 7,200-second harness timeout, not from a measured Facebook
+SAM3 reference or a user requirement. Reference-speed measurement is delegated
+to <https://github.com/den-sq/sam_parity/issues/48>; cross-candidate,
+user-specific measurement and target derivation are delegated to
+<https://github.com/den-sq/sam_parity/issues/49>.
+
 ## Dependency and verification record
 
 The plugin uses `0.11.0` for `candle-core`, `candle-nn`, and `candle-transformers`; its lockfile is already on the reviewed 0.11 dependency set. Both Docker pin declarations, the smoke default, and scaffold documentation name the exact Candle candidate SHA.
 
 Completed verification:
 
-- `cargo test -p candle-transformers sam3::video`: 22 passed at final Candle `8989bedb`.
-- `cargo test -p candle-transformers --lib`: 50 passed, 3 ignored at final Candle `8989bedb`.
+- `cargo test -p candle-transformers sam3::video`: 22 passed at final Candle `71690361`.
+- `cargo test -p candle-transformers --lib`: 51 passed, 3 ignored at final Candle `71690361`.
 - `CUDARC_CUDA_VERSION=12040 CUDA_COMPUTE_CAP=75 cargo check -p candle-transformers --features cuda`: passed for the candidate stack (11 PTX and 15 CUDA kernels).
 - Plugin `cargo test` at predecessor plugin `dd03d084` against the then-current candidate Candle worktree: 77 passed; annotation contract passed; checkpoint-load test ignored unless a private checkpoint path is supplied.
 - Focused plugin Candle-SAM3 module after changing the defaults: 13 passed,
@@ -148,11 +178,11 @@ Completed verification:
 - Pre-selection predecessor-SHA F32/BF16 and F32/F32 GPU smokes: passed
   geometry, binary-output, CUDA-device, image-revision, and checkpoint-revision
   checks; their CPU-offload scope is recorded above.
-- Final Candle head regressions: the packed BF16-to-F32 cast-on-read test and
-  caller-level CPU retained-storage test passed; the SAM3 video suite passed
-  22/22; the full library passed 50 with 3 ignored; and the CUDA-gated
-  retained-storage test passed on compute capability 7.5 after compiling 11 PTX
-  and 15 CUDA kernels under CUDA 12.4.
+- Final Candle head regressions: the packed BF16-to-F32 cast-on-read test,
+  compute-dtype packed-cache test, and caller-level CPU retained-storage test
+  passed; the SAM3 video suite passed 22/22; the full library passed 51 with 3
+  ignored; and both Turing-specific packed-cache CUDA tests passed on compute
+  capability 7.5 after compiling 11 PTX and 15 CUDA kernels under CUDA 12.4.
 - Final plugin head against the final Candle worktree: backend library tests
   passed 78/78; frontend reconnect tests passed 4/4; lint passed. The accepted
   initial-hotstart reconnect tests from
@@ -162,11 +192,15 @@ Completed verification:
 ## Freeze disposition
 
 The proposed provisional freeze is Candle
-`8989bedb1124032afa79fd9397d38d46fd173433` plus plugin
-`857eac5ed1341a116222912ca763ec59709f381f`, selecting bounded GPU-resident F32
+`71690361a0e4eb839cfc22a52fcdf5cfbf047f0a` plus plugin
+`7438668043d5021d016e5e0402012657dab69309`, selecting bounded GPU-resident F32
 compute and retained state. CPU offload and BF16 retained storage remain explicit
-fallback/benchmark controls. <https://github.com/den-sq/sam_parity/issues/35>
-should remain open until sustained throughput can be measured without the host
-power-policy collapse and reviewers either approve a revised runtime target or
-require additional bounded optimization before
-<https://github.com/den-sq/sam_parity/issues/36> freezes the unchanged SHAs.
+fallback/benchmark controls; their packed paths are runnable on the SM75 target.
+The execution-time target is delegated to
+<https://github.com/den-sq/sam_parity/issues/48> and
+<https://github.com/den-sq/sam_parity/issues/49>, and no material throughput
+speedup is claimed here. With that delegation, the explicit attribution above,
+and the Turing AC8 gap closed, this record supports closing
+<https://github.com/den-sq/sam_parity/issues/35> and proceeding to
+<https://github.com/den-sq/sam_parity/issues/36> against the unchanged frozen
+SHAs.
