@@ -7,11 +7,11 @@
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(
-            source,
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
             VideoSessionOptions {
                 tokenizer_path: Some(tokenizer_path),
                 ..VideoSessionOptions::default()
@@ -131,10 +131,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (points, point_labels) = load_reference_point_prompt(bundle)?;
         let obj_id = predictor.add_prompt(
             &session_id,
@@ -253,14 +253,970 @@
         Ok(())
     }
 
+    #[cfg(feature = "cuda")]
+    #[derive(Debug)]
+    struct ConditionedFrameCudaSnapshot {
+        frame0_mask: Tensor,
+        frame1_mask: Tensor,
+        frame1_low_res_logits: Tensor,
+        frame1_high_res_logits: Tensor,
+        frame1_obj_ptr: Tensor,
+        frame1_object_score_logits: Tensor,
+        frame1_maskmem_features: Tensor,
+        frame1_maskmem_pos_enc: Tensor,
+    }
+
+    #[cfg(feature = "cuda")]
+    #[derive(Clone, Copy, Debug)]
+    struct TensorTolerance {
+        atol: f32,
+        rtol: f32,
+    }
+
+    // Issue #46 predeclared numerical contract. Keep these constants in sync
+    // with docs/CANDLE2_F16_CUDA_ACCEPTANCE.md; do not tune them from a failing
+    // certification run without recording the failure and its root cause.
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_MASK_LOGIT_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.75,
+        rtol: 0.05,
+    };
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_OBJECT_SCORE_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.25,
+        rtol: 0.02,
+    };
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_OBJ_PTR_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.25,
+        rtol: 0.03,
+    };
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_MASKMEM_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.25,
+        rtol: 0.04,
+    };
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 1.0,
+        rtol: 0.05,
+    };
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_OBJECT_SCORE_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.5,
+        rtol: 0.05,
+    };
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_OBJ_PTR_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.5,
+        rtol: 0.05,
+    };
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE: TensorTolerance = TensorTolerance {
+        atol: 0.5,
+        rtol: 0.08,
+    };
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_MIN_BINARY_IOU: f32 = 0.99;
+    #[cfg(feature = "cuda")]
+    const F16_VS_F32_MAX_PIXEL_DELTA_RATE: f32 = 0.005;
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_MIN_BINARY_IOU: f32 = 0.97;
+    #[cfg(feature = "cuda")]
+    const CANDLE_VS_FACEBOOK_MAX_PIXEL_DELTA_RATE: f32 = 0.01;
+    #[cfg(feature = "cuda")]
+    const ISSUE46_NEAR_BOUNDARY_REFERENCE_ABS_MAX: f32 = 0.5;
+
+    #[cfg(feature = "cuda")]
+    fn assert_all_finite(label: &str, tensor: &Tensor) -> Result<()> {
+        let values = tensor
+            .to_device(&Device::Cpu)?
+            .to_dtype(DType::F32)?
+            .flatten_all()?
+            .to_vec1::<f32>()?;
+        if let Some((index, value)) = values
+            .iter()
+            .copied()
+            .enumerate()
+            .find(|(_, value)| !value.is_finite())
+        {
+            candle::bail!("{label} contains non-finite value {value} at flattened index {index}");
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    fn assert_tensor_close_atol_rtol(
+        label: &str,
+        actual: &Tensor,
+        expected: &Tensor,
+        tolerance: TensorTolerance,
+    ) -> Result<()> {
+        if actual.shape() != expected.shape() {
+            candle::bail!(
+                "{label} shape mismatch: actual {:?}, expected {:?}",
+                actual.shape().dims(),
+                expected.shape().dims()
+            );
+        }
+        assert_all_finite(label, actual)?;
+        assert_all_finite(&format!("{label} reference"), expected)?;
+        let actual = actual.to_device(&Device::Cpu)?.to_dtype(DType::F32)?;
+        let expected = expected.to_device(&Device::Cpu)?.to_dtype(DType::F32)?;
+        let diff = actual.broadcast_sub(&expected)?.abs()?;
+        let allowed = expected
+            .abs()?
+            .affine(tolerance.rtol as f64, tolerance.atol as f64)?;
+        if diff.elem_count() == 0 {
+            eprintln!(
+                "[ISSUE46_TENSOR] label={label:?} atol={} rtol={} empty=true",
+                tolerance.atol, tolerance.rtol
+            );
+            return Ok(());
+        }
+        let max_abs_diff = diff
+            .flatten_all()?
+            .max(0)?
+            .to_vec0::<f32>()?;
+        let mean_abs_diff = diff.mean_all()?.to_vec0::<f32>()?;
+        let excess = diff.broadcast_sub(&allowed)?;
+        let max_excess = excess
+            .flatten_all()?
+            .max(0)?
+            .to_vec0::<f32>()?;
+        let violation_count = excess
+            .gt(0f64)?
+            .to_dtype(DType::F32)?
+            .sum_all()?
+            .to_vec0::<f32>()? as usize;
+        let violation_rate = violation_count as f32 / diff.elem_count() as f32;
+        let actual_values = actual.flatten_all()?.to_vec1::<f32>()?;
+        let expected_values = expected.flatten_all()?.to_vec1::<f32>()?;
+        let mut sign_agreement_count = 0usize;
+        let mut near_boundary_count = 0usize;
+        let mut near_boundary_sign_agreement_count = 0usize;
+        let mut near_boundary_max_abs_diff = 0f32;
+        for (&actual, &expected) in actual_values.iter().zip(&expected_values) {
+            let signs_agree = (actual >= 0.0) == (expected >= 0.0);
+            sign_agreement_count += usize::from(signs_agree);
+            if expected.abs() <= ISSUE46_NEAR_BOUNDARY_REFERENCE_ABS_MAX {
+                near_boundary_count += 1;
+                near_boundary_sign_agreement_count += usize::from(signs_agree);
+                near_boundary_max_abs_diff =
+                    near_boundary_max_abs_diff.max((actual - expected).abs());
+            }
+        }
+        let sign_agreement_rate = sign_agreement_count as f32 / diff.elem_count() as f32;
+        let near_boundary_sign_agreement_rate = if near_boundary_count == 0 {
+            1.0
+        } else {
+            near_boundary_sign_agreement_count as f32 / near_boundary_count as f32
+        };
+        eprintln!(
+            "[ISSUE46_TENSOR] label={label:?} atol={} rtol={} max_abs_diff={max_abs_diff:.6} mean_abs_diff={mean_abs_diff:.6} violation_count={violation_count} violation_rate={violation_rate:.8} sign_agreement_rate={sign_agreement_rate:.8} near_boundary_reference_abs_max={ISSUE46_NEAR_BOUNDARY_REFERENCE_ABS_MAX:.6} near_boundary_count={near_boundary_count} near_boundary_max_abs_diff={near_boundary_max_abs_diff:.6} near_boundary_sign_agreement_rate={near_boundary_sign_agreement_rate:.8}",
+            tolerance.atol,
+            tolerance.rtol,
+        );
+        if max_excess > 0.0 {
+            candle::bail!(
+                "{label} exceeded atol={} rtol={}: max_abs_diff={max_abs_diff:.6}, mean_abs_diff={mean_abs_diff:.6}, max_excess={max_excess:.6}, violation_count={violation_count}, violation_rate={violation_rate:.8}, sign_agreement_rate={sign_agreement_rate:.8}, near_boundary_reference_abs_max={ISSUE46_NEAR_BOUNDARY_REFERENCE_ABS_MAX:.6}, near_boundary_count={near_boundary_count}, near_boundary_max_abs_diff={near_boundary_max_abs_diff:.6}, near_boundary_sign_agreement_rate={near_boundary_sign_agreement_rate:.8}",
+                tolerance.atol,
+                tolerance.rtol
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    fn binary_mask_metrics(actual: &Tensor, expected: &Tensor) -> Result<(f32, f32)> {
+        let actual = tensor_to_mask_probs_2d(actual)?;
+        let expected = tensor_to_mask_probs_2d(expected)?;
+        if actual.len() != expected.len()
+            || actual.first().map(Vec::len).unwrap_or(0)
+                != expected.first().map(Vec::len).unwrap_or(0)
+        {
+            candle::bail!(
+                "mask size mismatch: actual={}x{}, expected={}x{}",
+                actual.len(),
+                actual.first().map(Vec::len).unwrap_or(0),
+                expected.len(),
+                expected.first().map(Vec::len).unwrap_or(0)
+            );
+        }
+        let mut intersection = 0usize;
+        let mut union = 0usize;
+        let mut changed = 0usize;
+        let mut total = 0usize;
+        for (actual_row, expected_row) in actual.iter().zip(expected.iter()) {
+            for (actual_value, expected_value) in actual_row.iter().zip(expected_row.iter()) {
+                let actual_fg = *actual_value >= 0.5;
+                let expected_fg = *expected_value >= 0.5;
+                intersection += usize::from(actual_fg && expected_fg);
+                union += usize::from(actual_fg || expected_fg);
+                changed += usize::from(actual_fg != expected_fg);
+                total += 1;
+            }
+        }
+        let iou = if union == 0 {
+            1.0
+        } else {
+            intersection as f32 / union as f32
+        };
+        let pixel_delta_rate = if total == 0 {
+            0.0
+        } else {
+            changed as f32 / total as f32
+        };
+        Ok((iou, pixel_delta_rate))
+    }
+
+    #[cfg(feature = "cuda")]
+    fn assert_binary_mask_metrics(
+        label: &str,
+        actual: &Tensor,
+        expected: &Tensor,
+        min_iou: f32,
+        max_pixel_delta_rate: f32,
+    ) -> Result<()> {
+        let (iou, pixel_delta_rate) = binary_mask_metrics(actual, expected)?;
+        if iou < min_iou || pixel_delta_rate > max_pixel_delta_rate {
+            candle::bail!(
+                "{label} binary mask mismatch: iou={iou:.6} (minimum {min_iou:.6}), pixel_delta_rate={pixel_delta_rate:.6} (maximum {max_pixel_delta_rate:.6})"
+            );
+        }
+        eprintln!(
+            "[ISSUE46_MASK] label={label:?} iou={iou:.6} pixel_delta_rate={pixel_delta_rate:.6}"
+        );
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    fn reference_record_tensor(
+        bundle: &str,
+        stage: &str,
+        frame_idx: usize,
+        logical_key: &str,
+    ) -> Result<Tensor> {
+        let record = load_reference_internal_record(bundle, stage, frame_idx)?;
+        let tensor_key = record["tensor_keys"][logical_key].as_str().ok_or_else(|| {
+            candle::Error::Msg(format!(
+                "reference {stage} frame {frame_idx} missing tensor key {logical_key}"
+            ))
+        })?;
+        load_reference_internal_tensor(bundle, tensor_key)
+    }
+
+    #[cfg(feature = "cuda")]
+    fn run_conditioned_frame_cuda_fixture(
+        device: &Device,
+        dtype: DType,
+    ) -> Result<Option<ConditionedFrameCudaSnapshot>> {
+        let bundle = "reference_video_point_debug_single_click";
+        let Some((model, tracker)) =
+            load_runtime_models_from_checkpoint_on(Some(bundle), dtype, device)?
+        else {
+            return Ok(None);
+        };
+        if model.compute_dtype() != dtype || tracker.parity_compute_dtype() != dtype {
+            candle::bail!(
+                "requested {dtype:?} compute, got image={:?} tracker={:?}",
+                model.compute_dtype(),
+                tracker.parity_compute_dtype()
+            );
+        }
+        let source = reference_frame_source(&model, bundle)?;
+        let mut predictor = Sam3VideoPredictor::new(&model, &tracker, device);
+        apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
+            VideoSessionOptions {
+                retained_state_dtype: sam3::RetainedStateDType::BF16,
+                max_non_cond_tracker_states: Some(16),
+                ..VideoSessionOptions::default()
+            },
+        )?;
+        let (points, point_labels) = load_reference_point_prompt(bundle)?;
+        let obj_id = predictor.add_prompt(
+            &session_id,
+            0,
+            SessionPrompt {
+                text: None,
+                points: Some(points),
+                point_labels: Some(point_labels),
+                boxes: None,
+                box_labels: None,
+            },
+            None,
+            true,
+            true,
+        )?;
+        let tracker_core = Sam3VideoTrackerCore::new(&tracker);
+        let video_config = predictor.parity_video_config().clone();
+        let frame0 = {
+            let session = predictor
+                .parity_session_mut(&session_id)
+                .expect("conditioned-frame CUDA session exists");
+            tracker_core.parity_process_frame(
+                &model,
+                device,
+                &video_config,
+                session,
+                0,
+                PropagationDirection::Forward,
+                VIDEO_DEBUG_MASK_THRESHOLD,
+            )?
+        };
+        let frame1 = {
+            let session = predictor
+                .parity_session_mut(&session_id)
+                .expect("conditioned-frame CUDA session exists");
+            tracker_core.parity_process_frame(
+                &model,
+                device,
+                &video_config,
+                session,
+                1,
+                PropagationDirection::Forward,
+                VIDEO_DEBUG_MASK_THRESHOLD,
+            )?
+        };
+        device.synchronize()?;
+        let frame0_object = frame0
+            .objects
+            .iter()
+            .find(|object| object.obj_id == obj_id)
+            .ok_or_else(|| candle::Error::Msg("frame 0 missing prompted object".to_owned()))?;
+        let frame1_object = frame1
+            .objects
+            .iter()
+            .find(|object| object.obj_id == obj_id)
+            .ok_or_else(|| candle::Error::Msg("frame 1 missing propagated object".to_owned()))?;
+        if frame1_object.prompt_frame_idx != Some(0) {
+            candle::bail!(
+                "frame 1 did not retain frame 0 as its conditioning prompt: {:?}",
+                frame1_object.prompt_frame_idx
+            );
+        }
+        let session = predictor
+            .parity_session(&session_id)
+            .expect("conditioned-frame CUDA session exists");
+        let tracked_object = session
+            .parity_tracked_objects()
+            .get(&obj_id)
+            .expect("prompted object remains tracked");
+        let frame0_state = tracked_object
+            .tracker_states
+            .get(&0)
+            .expect("frame 0 conditioning state exists");
+        let frame1_state = tracked_object
+            .tracker_states
+            .get(&1)
+            .expect("frame 1 propagated state exists");
+        if !frame0_state.is_cond_frame || frame1_state.is_cond_frame {
+            candle::bail!(
+                "unexpected conditioning flags: frame0={}, frame1={}",
+                frame0_state.is_cond_frame,
+                frame1_state.is_cond_frame
+            );
+        }
+        if frame0_state.maskmem_features.as_ref().map(Tensor::dtype) != Some(DType::BF16)
+            || frame1_state.maskmem_features.as_ref().map(Tensor::dtype) != Some(DType::BF16)
+        {
+            candle::bail!(
+                "retained mask-memory dtype mismatch: frame0={:?}, frame1={:?}",
+                frame0_state.maskmem_features.as_ref().map(Tensor::dtype),
+                frame1_state.maskmem_features.as_ref().map(Tensor::dtype)
+            );
+        }
+        let to_cpu = |tensor: &Tensor| tensor.to_device(&Device::Cpu);
+        let snapshot = ConditionedFrameCudaSnapshot {
+            frame0_mask: to_cpu(&frame0_object.masks)?,
+            frame1_mask: to_cpu(&frame1_object.masks)?,
+            frame1_low_res_logits: to_cpu(&frame1_state.low_res_masks)?,
+            // Public video outputs intentionally rebuild `mask_logits` from
+            // the thresholded output mask. Recover the semantically matching
+            // raw tracker high-resolution logits from the retained raw
+            // low-resolution state instead.
+            frame1_high_res_logits: to_cpu(
+                &frame1_state.low_res_masks.upsample_bilinear2d(
+                    tracker.config().image_size,
+                    tracker.config().image_size,
+                    false,
+                )?,
+            )?,
+            frame1_obj_ptr: to_cpu(&frame1_state.obj_ptr)?,
+            frame1_object_score_logits: to_cpu(&frame1_state.object_score_logits)?,
+            frame1_maskmem_features: to_cpu(
+                frame1_state
+                    .maskmem_features
+                    .as_ref()
+                    .expect("frame 1 mask-memory features exist"),
+            )?,
+            frame1_maskmem_pos_enc: to_cpu(
+                frame1_state
+                    .maskmem_pos_enc
+                    .as_ref()
+                    .expect("frame 1 mask-memory position encoding exists"),
+            )?,
+        };
+        for (label, tensor) in [
+            ("frame0.mask", &snapshot.frame0_mask),
+            ("frame1.mask", &snapshot.frame1_mask),
+            ("frame1.low_res_logits", &snapshot.frame1_low_res_logits),
+            ("frame1.high_res_logits", &snapshot.frame1_high_res_logits),
+            ("frame1.obj_ptr", &snapshot.frame1_obj_ptr),
+            (
+                "frame1.object_score_logits",
+                &snapshot.frame1_object_score_logits,
+            ),
+            (
+                "frame1.maskmem_features",
+                &snapshot.frame1_maskmem_features,
+            ),
+            (
+                "frame1.maskmem_pos_enc",
+                &snapshot.frame1_maskmem_pos_enc,
+            ),
+        ] {
+            assert_all_finite(label, tensor)?;
+        }
+        Ok(Some(snapshot))
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "serial checkpoint-backed F32/F16 CUDA acceptance fixture for issue #46"]
+    fn conditioned_frame_f16_cuda_matches_f32_and_facebook_references() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let Some(f32_snapshot) = run_conditioned_frame_cuda_fixture(&device, DType::F32)? else {
+            return Ok(());
+        };
+        device.synchronize()?;
+        let Some(f16_snapshot) = run_conditioned_frame_cuda_fixture(&device, DType::F16)? else {
+            return Ok(());
+        };
+        device.synchronize()?;
+
+        let mut failures = Vec::new();
+        macro_rules! acceptance_check {
+            ($result:expr) => {
+                if let Err(error) = $result {
+                    eprintln!("[ISSUE46_FAILURE] {error}");
+                    failures.push(error.to_string());
+                }
+            };
+        }
+
+        acceptance_check!(assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 low-res logits",
+            &f16_snapshot.frame1_low_res_logits,
+            &f32_snapshot.frame1_low_res_logits,
+            F16_VS_F32_MASK_LOGIT_TOLERANCE,
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 high-res logits",
+            &f16_snapshot.frame1_high_res_logits,
+            &f32_snapshot.frame1_high_res_logits,
+            F16_VS_F32_MASK_LOGIT_TOLERANCE,
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 object score logits",
+            &f16_snapshot.frame1_object_score_logits,
+            &f32_snapshot.frame1_object_score_logits,
+            F16_VS_F32_OBJECT_SCORE_TOLERANCE,
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 object pointer",
+            &f16_snapshot.frame1_obj_ptr,
+            &f32_snapshot.frame1_obj_ptr,
+            F16_VS_F32_OBJ_PTR_TOLERANCE,
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 mask-memory features",
+            &f16_snapshot.frame1_maskmem_features,
+            &f32_snapshot.frame1_maskmem_features,
+            F16_VS_F32_MASKMEM_TOLERANCE,
+        ));
+        acceptance_check!(assert_tensor_close_atol_rtol(
+            "F16/F32 frame1 mask-memory position encoding",
+            &f16_snapshot.frame1_maskmem_pos_enc,
+            &f32_snapshot.frame1_maskmem_pos_enc,
+            F16_VS_F32_MASKMEM_TOLERANCE,
+        ));
+        acceptance_check!(assert_binary_mask_metrics(
+            "F16/F32 frame 0 output",
+            &f16_snapshot.frame0_mask,
+            &f32_snapshot.frame0_mask,
+            F16_VS_F32_MIN_BINARY_IOU,
+            F16_VS_F32_MAX_PIXEL_DELTA_RATE,
+        ));
+        acceptance_check!(assert_binary_mask_metrics(
+            "F16/F32 frame 1 output",
+            &f16_snapshot.frame1_mask,
+            &f32_snapshot.frame1_mask,
+            F16_VS_F32_MIN_BINARY_IOU,
+            F16_VS_F32_MAX_PIXEL_DELTA_RATE,
+        ));
+
+        let bundle = "reference_video_point_debug_single_click";
+        let facebook_low_res = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.pred_masks",
+        )?;
+        let facebook_high_res_model = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.pred_masks_high_res",
+        )?;
+        let (_batch, _channels, output_height, output_width) =
+            f32_snapshot.frame1_high_res_logits.dims4()?;
+        let facebook_high_res =
+            facebook_high_res_model.upsample_bilinear2d(output_height, output_width, false)?;
+        let facebook_obj_ptr = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.obj_ptr",
+        )?;
+        let facebook_object_score = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.object_score_logits",
+        )?;
+        let facebook_maskmem = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.maskmem_features",
+        )?;
+        let facebook_maskmem_pos = reference_record_tensor(
+            bundle,
+            "track_step",
+            1,
+            "track_step_output.maskmem_pos_enc.0",
+        )?;
+        let (_boxes, _score, facebook_mask_path) = load_reference_frame_output(bundle, 1)?;
+        let facebook_mask = load_mask_tensor_from_png(&facebook_mask_path)?;
+        for (label, actual, expected, tolerance) in [
+            (
+                "F32/Facebook frame1 low-res logits",
+                &f32_snapshot.frame1_low_res_logits,
+                &facebook_low_res,
+                CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 low-res logits",
+                &f16_snapshot.frame1_low_res_logits,
+                &facebook_low_res,
+                CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 high-res logits",
+                &f32_snapshot.frame1_high_res_logits,
+                &facebook_high_res,
+                CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 high-res logits",
+                &f16_snapshot.frame1_high_res_logits,
+                &facebook_high_res,
+                CANDLE_VS_FACEBOOK_MASK_LOGIT_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 object score logits",
+                &f32_snapshot.frame1_object_score_logits,
+                &facebook_object_score,
+                CANDLE_VS_FACEBOOK_OBJECT_SCORE_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 object score logits",
+                &f16_snapshot.frame1_object_score_logits,
+                &facebook_object_score,
+                CANDLE_VS_FACEBOOK_OBJECT_SCORE_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 object pointer",
+                &f32_snapshot.frame1_obj_ptr,
+                &facebook_obj_ptr,
+                CANDLE_VS_FACEBOOK_OBJ_PTR_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 object pointer",
+                &f16_snapshot.frame1_obj_ptr,
+                &facebook_obj_ptr,
+                CANDLE_VS_FACEBOOK_OBJ_PTR_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 mask-memory features",
+                &f32_snapshot.frame1_maskmem_features,
+                &facebook_maskmem,
+                CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 mask-memory features",
+                &f16_snapshot.frame1_maskmem_features,
+                &facebook_maskmem,
+                CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE,
+            ),
+            (
+                "F32/Facebook frame1 mask-memory position encoding",
+                &f32_snapshot.frame1_maskmem_pos_enc,
+                &facebook_maskmem_pos,
+                CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE,
+            ),
+            (
+                "F16/Facebook frame1 mask-memory position encoding",
+                &f16_snapshot.frame1_maskmem_pos_enc,
+                &facebook_maskmem_pos,
+                CANDLE_VS_FACEBOOK_MASKMEM_TOLERANCE,
+            ),
+        ] {
+            acceptance_check!(assert_tensor_close_atol_rtol(
+                label, actual, expected, tolerance
+            ));
+        }
+        for (label, actual) in [
+            ("F32/Facebook frame 1 output", &f32_snapshot.frame1_mask),
+            ("F16/Facebook frame 1 output", &f16_snapshot.frame1_mask),
+        ] {
+            acceptance_check!(assert_binary_mask_metrics(
+                label,
+                actual,
+                &facebook_mask,
+                CANDLE_VS_FACEBOOK_MIN_BINARY_IOU,
+                CANDLE_VS_FACEBOOK_MAX_PIXEL_DELTA_RATE,
+            ));
+        }
+        if !failures.is_empty() {
+            candle::bail!(
+                "Issue #46 conditioned-frame CUDA fixture failed {} declared gate(s):\n{}",
+                failures.len(),
+                failures.join("\n")
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    fn issue46_f16_session_options() -> VideoSessionOptions {
+        VideoSessionOptions {
+            retained_state_dtype: sam3::RetainedStateDType::BF16,
+            max_non_cond_tracker_states: Some(16),
+            ..VideoSessionOptions::default()
+        }
+    }
+
+    #[cfg(feature = "cuda")]
+    fn assert_issue46_frame_matches_facebook(
+        bundle: &str,
+        frame: &sam3::VideoFrameOutput,
+        obj_id: u32,
+        minimum_iou: f32,
+    ) -> Result<()> {
+        let object = frame
+            .objects
+            .iter()
+            .find(|object| object.obj_id == obj_id)
+            .ok_or_else(|| {
+                candle::Error::Msg(format!(
+                    "{bundle} frame {} missing object {obj_id}",
+                    frame.frame_idx
+                ))
+            })?;
+        for (suffix, tensor) in [
+            ("mask_logits", &object.mask_logits),
+            ("masks", &object.masks),
+            ("boxes_xyxy", &object.boxes_xyxy),
+            ("scores", &object.scores),
+        ] {
+            assert_all_finite(
+                &format!("{bundle}.frame{}.obj{obj_id}.{suffix}", frame.frame_idx),
+                tensor,
+            )?;
+        }
+        if let Some(presence_scores) = object.presence_scores.as_ref() {
+            assert_all_finite(
+                &format!(
+                    "{bundle}.frame{}.obj{obj_id}.presence_scores",
+                    frame.frame_idx
+                ),
+                presence_scores,
+            )?;
+        }
+        let (_boxes, _score, expected_mask_path) =
+            load_reference_frame_output(bundle, frame.frame_idx)?;
+        let iou = binary_mask_iou(&object.masks, &expected_mask_path)?;
+        eprintln!(
+            "[ISSUE46_WORKFLOW] bundle={bundle:?} frame={} obj_id={obj_id} iou={iou:.6}",
+            frame.frame_idx
+        );
+        if iou < minimum_iou {
+            candle::bail!(
+                "{bundle} frame {} object {obj_id} mask IoU {iou:.6} is below {minimum_iou:.6}",
+                frame.frame_idx
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "cuda")]
+    #[test]
+    #[ignore = "serial checkpoint-backed native-F16 CUDA workflow acceptance for issue #46"]
+    fn f16_cuda_video_workflow_acceptance_matrix() -> Result<()> {
+        let device = Device::new_cuda(0)?;
+        let forward_bundle = "reference_video_point_debug_single_click";
+        let Some((model, tracker)) =
+            load_runtime_models_from_checkpoint_on(Some(forward_bundle), DType::F16, &device)?
+        else {
+            return Ok(());
+        };
+        if model.compute_dtype() != DType::F16 || tracker.parity_compute_dtype() != DType::F16 {
+            candle::bail!(
+                "requested F16 compute, got image={:?} tracker={:?}",
+                model.compute_dtype(),
+                tracker.parity_compute_dtype()
+            );
+        }
+
+        // Forward streaming, bounded retained history, hotstart draining,
+        // reset/close cleanup, and a fresh-session restart all share one model
+        // load so the lifecycle assertions exercise the production owner.
+        let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
+        apply_reference_predictor_runtime_overrides(&mut predictor, forward_bundle)?;
+        predictor.parity_video_config_mut().hotstart_delay = 2;
+        let source = reference_frame_source(&model, forward_bundle)?;
+        let session_id = predictor
+            .start_session_with_frame_source(Box::new(source), issue46_f16_session_options())?;
+        let (points, point_labels) = load_reference_point_prompt(forward_bundle)?;
+        let obj_id = predictor.add_prompt(
+            &session_id,
+            0,
+            SessionPrompt {
+                text: None,
+                points: Some(points),
+                point_labels: Some(point_labels),
+                boxes: None,
+                box_labels: None,
+            },
+            None,
+            true,
+            true,
+        )?;
+        let mut forward_frames = Vec::new();
+        predictor.propagate_in_video_stream(
+            &session_id,
+            PropagationOptions {
+                direction: PropagationDirection::Forward,
+                start_frame_idx: Some(0),
+                max_frame_num_to_track: Some(4),
+                output_prob_threshold: None,
+            },
+            |frame| {
+                assert_issue46_frame_matches_facebook(forward_bundle, frame, obj_id, 0.97)?;
+                forward_frames.push(frame.frame_idx);
+                Ok(())
+            },
+        )?;
+        assert_eq!(forward_frames, vec![0, 1, 2, 3, 4]);
+        let forward_stats = predictor.session_cache_stats(&session_id)?;
+        assert_eq!(
+            forward_stats.retained_state_dtype,
+            sam3::RetainedStateDType::BF16
+        );
+        assert!(
+            forward_stats.retained_non_cond_tracker_states <= 16,
+            "bounded history exceeded 16 states: {:?}",
+            forward_stats
+        );
+        assert!(
+            forward_stats.cached_feature_entries <= 2,
+            "feature cache exceeded the configured bound: {:?}",
+            forward_stats
+        );
+        assert_eq!(forward_stats.hotstart_buffered_frames, 0);
+        assert!(
+            (1..=2).contains(&forward_stats.peak_hotstart_buffered_frames),
+            "hotstart buffer was not exercised or exceeded its delay: {:?}",
+            forward_stats
+        );
+
+        predictor.reset_session(&session_id)?;
+        let reset_stats = predictor.session_cache_stats(&session_id)?;
+        assert_eq!(reset_stats.tracked_objects, 0);
+        assert_eq!(reset_stats.retained_tracker_states, 0);
+        assert_eq!(reset_stats.retained_output_frame_indices, 0);
+        assert_eq!(reset_stats.cached_output_frames, 0);
+        assert_eq!(reset_stats.cached_feature_entries, 0);
+        assert_eq!(reset_stats.hotstart_buffered_frames, 0);
+        assert_eq!(reset_stats.cpu_bytes.total(), 0);
+        assert_eq!(reset_stats.device_bytes.total(), 0);
+        predictor.close_session(&session_id)?;
+        assert!(predictor.session_cache_stats(&session_id).is_err());
+
+        let restart_source = reference_frame_source(&model, forward_bundle)?;
+        let restart_id = predictor.start_session_with_frame_source(
+            Box::new(restart_source),
+            issue46_f16_session_options(),
+        )?;
+        assert_ne!(restart_id, session_id);
+        predictor.close_session(&restart_id)?;
+        assert!(predictor.session_cache_stats(&restart_id).is_err());
+
+        // Backward propagation from a late prompt frame.
+        let backward_bundle = "reference_video_reverse_propagation_debug";
+        let mut backward_predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
+        apply_reference_predictor_runtime_overrides(&mut backward_predictor, backward_bundle)?;
+        let backward_source = reference_frame_source(&model, backward_bundle)?;
+        let backward_session = backward_predictor.start_session_with_frame_source(
+            Box::new(backward_source),
+            issue46_f16_session_options(),
+        )?;
+        backward_predictor.add_prompt(
+            &backward_session,
+            20,
+            SessionPrompt {
+                text: None,
+                points: Some(vec![(0.61, 0.69)]),
+                point_labels: Some(vec![1]),
+                boxes: None,
+                box_labels: None,
+            },
+            Some(1),
+            true,
+            true,
+        )?;
+        let mut backward_frames = Vec::new();
+        backward_predictor.propagate_in_video_stream(
+            &backward_session,
+            PropagationOptions {
+                direction: PropagationDirection::Backward,
+                start_frame_idx: Some(20),
+                max_frame_num_to_track: Some(2),
+                output_prob_threshold: None,
+            },
+            |frame| {
+                assert_issue46_frame_matches_facebook(backward_bundle, frame, 1, 0.95)?;
+                backward_frames.push(frame.frame_idx);
+                Ok(())
+            },
+        )?;
+        assert_eq!(backward_frames, vec![20, 19, 18]);
+        assert!(
+            backward_predictor
+                .session_cache_stats(&backward_session)?
+                .retained_non_cond_tracker_states
+                <= 16
+        );
+        backward_predictor.close_session(&backward_session)?;
+        assert!(
+            backward_predictor
+                .session_cache_stats(&backward_session)
+                .is_err()
+        );
+
+        // Correction after an initial forward pass, followed by propagation
+        // that consumes the corrected conditioning state.
+        let correction_bundle = "reference_video_correction_click_debug";
+        let mut correction_predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
+        apply_reference_predictor_runtime_overrides(&mut correction_predictor, correction_bundle)?;
+        let correction_source = reference_frame_source(&model, correction_bundle)?;
+        let correction_session = correction_predictor.start_session_with_frame_source(
+            Box::new(correction_source),
+            issue46_f16_session_options(),
+        )?;
+        let (initial_points, initial_labels) =
+            load_reference_point_prompt_on_frame(correction_bundle, 0)?;
+        let correction_obj_id = correction_predictor.add_prompt(
+            &correction_session,
+            0,
+            SessionPrompt {
+                text: None,
+                points: Some(initial_points),
+                point_labels: Some(initial_labels),
+                boxes: None,
+                box_labels: None,
+            },
+            None,
+            true,
+            true,
+        )?;
+        correction_predictor.propagate_in_video(
+            &correction_session,
+            PropagationOptions {
+                direction: PropagationDirection::Forward,
+                start_frame_idx: Some(0),
+                max_frame_num_to_track: Some(9),
+                output_prob_threshold: None,
+            },
+        )?;
+        let (correction_points, correction_labels) =
+            load_reference_point_prompt_on_frame(correction_bundle, 8)?;
+        correction_predictor.add_prompt(
+            &correction_session,
+            8,
+            SessionPrompt {
+                text: None,
+                points: Some(correction_points),
+                point_labels: Some(correction_labels),
+                boxes: None,
+                box_labels: None,
+            },
+            Some(correction_obj_id),
+            false,
+            true,
+        )?;
+        let correction_core = Sam3VideoTrackerCore::new(&tracker);
+        let correction_config = correction_predictor.parity_video_config().clone();
+        for frame_idx in [8usize, 9usize] {
+            let frame = {
+                let session = correction_predictor
+                    .parity_session_mut(&correction_session)
+                    .expect("correction session exists");
+                correction_core.parity_process_frame(
+                    &model,
+                    &device,
+                    &correction_config,
+                    session,
+                    frame_idx,
+                    PropagationDirection::Forward,
+                    VIDEO_DEBUG_MASK_THRESHOLD,
+                )?
+            };
+            assert_issue46_frame_matches_facebook(
+                correction_bundle,
+                &frame,
+                correction_obj_id,
+                0.95,
+            )?;
+        }
+        assert!(
+            correction_predictor
+                .session_cache_stats(&correction_session)?
+                .retained_non_cond_tracker_states
+                <= 16
+        );
+        correction_predictor.close_session(&correction_session)?;
+        assert!(
+            correction_predictor
+                .session_cache_stats(&correction_session)
+                .is_err()
+        );
+        device.synchronize()?;
+        Ok(())
+    }
+
     fn assert_video_process_frame_matches_point_reference_bundle_frame0(bundle: &str) -> Result<()> {
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (points, point_labels) = load_reference_point_prompt(bundle)?;
         predictor.add_prompt(
             &session_id,
@@ -336,10 +1292,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (initial_points, initial_labels) = load_reference_point_prompt_on_frame(bundle, 0)?;
         let obj_id = predictor.add_prompt(
             &session_id,
@@ -653,10 +1609,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let video_size = predictor
             .parity_session(&session_id)
             .expect("session exists")
@@ -817,10 +1773,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         predictor.add_prompt(
             &session_id,
             0,
@@ -902,10 +1858,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         predictor.add_prompt(
             &session_id,
             0,
@@ -1049,10 +2005,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         predictor.add_prompt(
             &session_id,
             20,
@@ -1134,11 +2090,11 @@
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(
-            source,
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
             VideoSessionOptions {
                 tokenizer_path: Some(tokenizer_path),
                 ..VideoSessionOptions::default()
@@ -1205,10 +2161,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (points, point_labels) = load_reference_point_prompt(bundle)?;
         predictor.add_prompt(
             &session_id,
@@ -1289,10 +2245,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         predictor.add_prompt(
             &session_id,
             0,
@@ -1440,11 +2396,11 @@
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(
-            source,
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
             VideoSessionOptions {
                 tokenizer_path: Some(tokenizer_path),
                 ..VideoSessionOptions::default()
@@ -1631,11 +2587,11 @@
         let Some(tokenizer_path) = sam3_test_tokenizer_path() else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(
-            source,
+        let session_id = predictor.start_session_with_frame_source(
+            Box::new(source),
             VideoSessionOptions {
                 tokenizer_path: Some(tokenizer_path),
                 ..VideoSessionOptions::default()
@@ -1753,10 +2709,10 @@
         let bundle = "reference_video_suppressed_obj_ids_text_bed_debug";
         let model = tiny_model(device)?;
         let tracker = tiny_tracker(device)?;
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         for obj_id in load_reference_frame_object_ids(bundle, 0)? {
             let (_boxes, _score, mask_path) = load_reference_object_frame_output(bundle, 0, obj_id)?;
             predictor.add_mask_prompt(
@@ -1767,11 +2723,15 @@
             )?;
         }
         let visible_obj_ids_by_frame = load_reference_visible_obj_ids_by_frame(bundle)?;
-        let raw_outputs = visible_obj_ids_by_frame.keys().copied().collect::<Vec<_>>();
-        let raw_outputs = raw_outputs
-            .into_iter()
-            .map(|frame_idx| {
-                let objects = load_reference_run_single_frame_masks(bundle, frame_idx)?
+        let raw_outputs = visible_obj_ids_by_frame
+            .iter()
+            .map(|(&frame_idx, visible_obj_ids)| {
+                let reference_masks = if visible_obj_ids.is_empty() {
+                    Vec::new()
+                } else {
+                    load_reference_run_single_frame_masks(bundle, frame_idx)?
+                };
+                let objects = reference_masks
                     .into_iter()
                     .map(|(obj_id, mask)| {
                         let mask = mask.to_device(device)?;
@@ -1839,10 +2799,10 @@
         let Some((model, tracker, device)) = load_runtime_models_from_checkpoint(Some(bundle))? else {
             return Ok(());
         };
-        let source = VideoSource::from_path(reference_input_frames_dir(bundle))?;
+        let source = reference_frame_source(&model, bundle)?;
         let mut predictor = Sam3VideoPredictor::new(&model, &tracker, &device);
         apply_reference_predictor_runtime_overrides(&mut predictor, bundle)?;
-        let session_id = predictor.start_session(source, VideoSessionOptions::default())?;
+        let session_id = predictor.start_session_with_frame_source(Box::new(source), VideoSessionOptions::default())?;
         let (points, point_labels) = load_reference_point_prompt_on_frame(bundle, 5)?;
         predictor.add_prompt(
             &session_id,

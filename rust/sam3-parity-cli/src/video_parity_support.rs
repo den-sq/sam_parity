@@ -248,26 +248,49 @@ mod tests {
     fn load_runtime_models_from_checkpoint(
         bundle: Option<&str>,
     ) -> Result<Option<(Sam3ImageModel, Sam3TrackerModel, Device)>> {
+        let device = Device::Cpu;
+        let Some((model, tracker)) =
+            load_runtime_models_from_checkpoint_on(bundle, DType::F32, &device)?
+        else {
+            return Ok(None);
+        };
+        Ok(Some((model, tracker, device)))
+    }
+
+    fn load_runtime_models_from_checkpoint_on(
+        bundle: Option<&str>,
+        dtype: DType,
+        device: &Device,
+    ) -> Result<Option<(Sam3ImageModel, Sam3TrackerModel)>> {
         let Some(checkpoint_path) = sam3_test_checkpoint_path() else {
             return Ok(None);
         };
-        let device = Device::Cpu;
         let config = Config::default();
         let checkpoint = sam3::Sam3CheckpointSource::upstream_pth(checkpoint_path);
-        let model =
-            Sam3ImageModel::from_checkpoint_source(&config, &checkpoint, DType::F32, &device)?;
+        let model = Sam3ImageModel::from_checkpoint_source(&config, &checkpoint, dtype, device)?;
         let tracker_config = tracker_config_with_reference_runtime_overrides(bundle)?;
         let tracker = Sam3TrackerModel::new(
             &tracker_config,
-            checkpoint.load_tracker_var_builder(DType::F32, &device)?,
+            checkpoint.load_tracker_var_builder(dtype, device)?,
         )?;
-        Ok(Some((model, tracker, device)))
+        Ok(Some((model, tracker)))
     }
 
     fn sam3_test_tokenizer_path() -> Option<PathBuf> {
         let checkpoint_path = sam3_test_checkpoint_path()?;
         let tokenizer = checkpoint_path.parent()?.join("tokenizer.json");
         tokenizer.exists().then_some(tokenizer)
+    }
+
+    fn reference_frame_source(model: &Sam3ImageModel, bundle: &str) -> Result<MediaFrameSource> {
+        let config = model.config();
+        MediaFrameSource::from_path(
+            reference_input_frames_dir(bundle),
+            config.image.image_size,
+            config.image.image_mean,
+            config.image.image_std,
+        )
+        .map_err(|error| candle::Error::Msg(error.to_string()))
     }
 
     fn reference_bundle_dir(name: &str) -> PathBuf {

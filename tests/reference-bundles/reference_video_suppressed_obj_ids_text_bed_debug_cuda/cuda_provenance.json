@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "created_utc": "2026-07-18T08:14:00Z",
+  "purpose": "CANDLE-2 reference-backed CUDA tracker/video parity",
+  "device": {
+    "type": "cuda",
+    "ordinal": 0,
+    "name": "Quadro RTX 5000 with Max-Q Design",
+    "compute_capability": "7.5",
+    "driver_version": "581.60",
+    "memory_mib": 16384
+  },
+  "python_runtime": {
+    "python_version": "3.12.12",
+    "torch_version": "2.7.0+cu126",
+    "torch_cuda_version": "12.6",
+    "autocast_dtype": "bfloat16"
+  },
+  "facebook_sam3": {
+    "repository": "https://github.com/facebookresearch/sam3.git",
+    "commit": "84cc43bca4347b772f17d1078a1ddb4c054655c2",
+    "module_path": "/home/dnorthover/sam3/sam3/__init__.py"
+  },
+  "exporter": {
+    "repository": "https://github.com/den-sq/sam_parity.git",
+    "commit": "a620c3e7b283b03c9d89a52d36c1bc8b4ed177dd",
+    "scenario": "video_suppressed_obj_ids_text_bed_debug",
+    "video_frame_count": 30,
+    "propagated_frame_count": 5
+  },
+  "inputs": {
+    "checkpoint_sha256": "9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e",
+    "tokenizer_sha256": "6d9109cc838977f3ca94a379eec36aecc7c807e1785cd729660ca2fc0171fb35",
+    "bpe_sha256": "924691ac288e54409236115652ad4aa250f48203de50a9e4722a6ecd48d6804a",
+    "video_sha256": "1be76d5d19b066e8ad7c565d88a98e11a8f8d456a707508a7aa35390def70e30"
+  },
+  "outputs": {
+    "reference_json_sha256": "c35a657dad7e533c77e42ff6f9e310774f5702e282df4b8f0da8f5aa281781f1",
+    "video_results_json_sha256": "9e4252ec466576bbc1b27edc8e3fd43b5fd129279e813307b66c8327214987d8",
+    "internal_manifest_json_sha256": "efc22f10f55ad72e941671ac560c9907664879a5e6737d1ee55366b131d16c9c",
+    "internal_fixtures_safetensors_sha256": "6e80d91475ab51eae268545a0aa0c0fa1b1f5badb1c8d2b573cc248f74d849ba"
+  },
+  "validation": {
+    "bundle_validator": "ok",
+    "candle_commit": "71fad7110bcd1d861102ef256a76eeeac1300bce",
+    "candle_cuda_test": "video_propagation_matches_text_prompt_suppressed_reference_bundle_cuda",
+    "candle_cuda_test_result": "passed"
+  }
+}
