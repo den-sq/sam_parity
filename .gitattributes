@@ -16,6 +16,9 @@
 *.webp filter=lfs diff=lfs merge=lfs -text
 *.WEBP filter=lfs diff=lfs merge=lfs -text
 
+# Structured text evidence
+*.csv text eol=lf
+
 # Video assets
 *.avi filter=lfs diff=lfs merge=lfs -text
 *.AVI filter=lfs diff=lfs merge=lfs -text

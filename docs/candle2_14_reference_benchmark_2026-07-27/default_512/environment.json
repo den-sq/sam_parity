@@ -1,0 +1,32 @@
+{
+  "captured_at_utc": "2026-07-27T19:31:16.848987+00:00",
+  "python": "3.12.12 | packaged by conda-forge | (main, Oct 22 2025, 23:25:55) [GCC 14.3.0]",
+  "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+  "torch_version": "2.7.0+cu126",
+  "torch_cuda_runtime": "12.6",
+  "cudnn_version": 90501,
+  "gpu": "Quadro RTX 5000 with Max-Q Design",
+  "gpu_total_memory_mib": 16383,
+  "gpu_compute_capability": "7.5",
+  "driver_version": "581.60",
+  "sam3": {
+    "commit": "84cc43bca4347b772f17d1078a1ddb4c054655c2",
+    "dirty": null,
+    "remote": null,
+    "source_url": "https://github.com/facebookresearch/sam3.git"
+  },
+  "sdpa_configuration": {
+    "flash_enabled": true,
+    "flash_available_in_build": true,
+    "memory_efficient_enabled": true,
+    "math_enabled": true,
+    "cudnn_enabled": true
+  },
+  "torch_compile": {
+    "used": false,
+    "disposition": "disabled explicitly for the reference benchmark"
+  },
+  "checkpoint_sha256": "6e40bbaa739ac44e3e47dc6355ef6dedc560a30411377ad891f8af9e6df0dbd6",
+  "fixture_sha256": "2150b3db007f167e90f4081a8daa445b3d5508de5798d1513d632acedd59f858",
+  "invocation": "/home/dnorthover/ChengCode/sam_parity_issue48/python/sam3_parity/reference_benchmark.py --fixture /tmp/candle_issue46_perf/f32/inputs/fixture_512.tif --checkpoint /volume/sam3-segmentation/chkpts/medical_sam3.pt --frames-dir /tmp/sam3_issue48_reference_frames_512 --output-dir /home/dnorthover/ChengCode/sam_parity_issue48/docs/candle2_14_reference_benchmark_2026-07-27/default_512 --dtype default --sam3-revision 84cc43bca4347b772f17d1078a1ddb4c054655c2 --telemetry-interval-seconds 1"
+}

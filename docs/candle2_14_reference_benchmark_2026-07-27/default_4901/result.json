@@ -1,0 +1,84 @@
+{
+  "status": "host_memory_infeasible",
+  "dtype_arm": "default",
+  "fixture": {
+    "sha256": "1a4fddfcdf2981d81602948f1bb06e1d30e55773b12e4e3234ef004533322155",
+    "frame_count": 4901,
+    "height": 200,
+    "width": 200,
+    "dtype": "uint16"
+  },
+  "annotation_count": 50,
+  "annotation_frame_count": 50,
+  "checkpoint_sha256": "6e40bbaa739ac44e3e47dc6355ef6dedc560a30411377ad891f8af9e6df0dbd6",
+  "frame_preparation": {
+    "fixture_sha256": "1a4fddfcdf2981d81602948f1bb06e1d30e55773b12e4e3234ef004533322155",
+    "frame_count": 4901,
+    "preprocessing": "uint16 integer division by 255 with saturation to uint8; grayscale-to-RGB expansion; Pillow JPEG quality 90",
+    "preparation_seconds": 3.7808735190192237,
+    "reused": false
+  },
+  "async_loading_frames": true,
+  "offload_video_to_cpu": true,
+  "offload_state_to_cpu": false,
+  "compile": false,
+  "process_pid": 1,
+  "compute": {
+    "upstream_default_autocast_enabled": true,
+    "upstream_default_autocast_dtype": "torch.bfloat16",
+    "effective_autocast_enabled": true,
+    "effective_autocast_dtype": "torch.bfloat16",
+    "model_parameter_dtype": "torch.float32"
+  },
+  "timings": {
+    "model_startup_seconds_telemetry_bound": 24.5,
+    "prompt_setup_seconds_telemetry_bound": 103.071,
+    "propagation_seconds_until_termination_telemetry_bound": 233.27,
+    "measured_end_to_end_seconds_until_termination": 361.953
+  },
+  "progress_at_termination": {
+    "frames_loaded_at_least": 3483,
+    "propagated_frames_at_least": 31,
+    "note": "Counts are the final progress values present in the captured upstream stderr log."
+  },
+  "frames_hashed": null,
+  "output_sha256": null,
+  "output_sha256_disposition": "Unavailable: the inference process was OOM-killed before finalizing its in-memory streamed digest; there is no completed full-run output.",
+  "termination": {
+    "reason": "Direct inference-process RSS and system swap exhaustion from the upstream async CPU frame cache.",
+    "operator_action": "docker stop was requested after system memory reached 69/70 GiB used and swap reached 16/18 GiB used; continuing risked host instability.",
+    "docker_final_state": {
+      "status": "exited",
+      "oom_killed": true,
+      "exit_code_reported": 0
+    }
+  },
+  "telemetry": {
+    "sample_count": 312,
+    "peak_process_rss_mib": 63739.387,
+    "peak_gpu_memory_used_mib": 11460.0,
+    "peak_torch_allocated_mib": 6894.778,
+    "peak_torch_reserved_mib": 9004.0,
+    "mean_propagation_gpu_utilization_percent": 83.22051282051282,
+    "peak_gpu_temperature_c": 78.0,
+    "minimum_propagation_gpu_clock_mhz": 300.0,
+    "maximum_propagation_gpu_clock_mhz": 1845.0,
+    "observed_propagation_pstates": [
+      "P0",
+      "P3",
+      "P5",
+      "P8"
+    ],
+    "memory_pressure_observation": {
+      "system_ram": "69 GiB used / 70 GiB total",
+      "system_swap": "16 GiB used / 18 GiB total",
+      "gpu_at_memory_pressure": "8% utilization, P8, 300 MHz",
+      "post_termination_recovery": "7.7 GiB RAM used and 380 MiB swap used"
+    }
+  },
+  "evidence_hashes": {
+    "telemetry_csv_sha256": "b5674b7413fab3c9268e6c248668e11d8561d7fc5d6c3b9ed4dd3d09174e7edb",
+    "environment_json_sha256": "4390d47f34732ed53af4d858b09288a2172c3832ebe05d46d28bf569cb8fff82",
+    "invocation_txt_sha256": "02eb7bc31d0eace5255dcbeb10165bc9d21131c5ff89c0a34c91b4fcc9f03cf1"
+  }
+}

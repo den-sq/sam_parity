@@ -255,7 +255,11 @@ class TelemetrySampler:
 
     def _run(self) -> None:
         with self.output_path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=self.FIELDS)
+            writer = csv.DictWriter(
+                handle,
+                fieldnames=self.FIELDS,
+                lineterminator="\n",
+            )
             writer.writeheader()
             while not self.stop_event.is_set():
                 sample = self._sample()

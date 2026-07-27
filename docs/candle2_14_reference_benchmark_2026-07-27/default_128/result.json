@@ -1,0 +1,735 @@
+{
+  "status": "completed",
+  "dtype_arm": "default",
+  "fixture": {
+    "path": "/tmp/candle_issue46_perf/f32/inputs/fixture_128.tif",
+    "sha256": "cb7a2b8170fc12cdd744f4bf2b86516f2fd409d675e6fabde91f0750660fadb6",
+    "frame_count": 128,
+    "height": 200,
+    "width": 200,
+    "dtype": "uint16",
+    "declared_shape": [
+      128,
+      200,
+      200,
+      1
+    ]
+  },
+  "annotation_count": 1,
+  "checkpoint_sha256": "6e40bbaa739ac44e3e47dc6355ef6dedc560a30411377ad891f8af9e6df0dbd6",
+  "frame_preparation": {
+    "fixture_sha256": "cb7a2b8170fc12cdd744f4bf2b86516f2fd409d675e6fabde91f0750660fadb6",
+    "frame_count": 128,
+    "preprocessing": "uint16 integer division by 255 with saturation to uint8; grayscale-to-RGB expansion; Pillow JPEG quality 90",
+    "preparation_seconds": 0.09782838198589161,
+    "reused": false
+  },
+  "async_loading_frames": true,
+  "offload_video_to_cpu": true,
+  "offload_state_to_cpu": false,
+  "compile": false,
+  "process_pid": 1,
+  "compute": {
+    "upstream_default_autocast_enabled": true,
+    "upstream_default_autocast_dtype": "torch.bfloat16",
+    "effective_autocast_enabled": true,
+    "effective_autocast_dtype": "torch.bfloat16",
+    "model_parameter_dtype": "torch.float32"
+  },
+  "annotation_frame_count": 1,
+  "timings": {
+    "model_startup_seconds": 21.513634573027957,
+    "session_setup_seconds": 0.02414189395494759,
+    "prompt_setup_seconds": 2.1894441920449026,
+    "propagation_seconds": 300.9792192680179,
+    "measured_end_to_end_seconds": 324.7071458749706
+  },
+  "frames_hashed": 128,
+  "last_frame_idx": 127,
+  "output_sha256": "11603ea429ee01fc6cbdb17c9d0ccdaebaa69477353776d813040bc7bdde7e18",
+  "sdpa": {
+    "selected_backends": [
+      "math"
+    ],
+    "signatures": [
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          9,
+          16,
+          576,
+          64
+        ],
+        "query_shape": [
+          9,
+          16,
+          576,
+          64
+        ],
+        "scale": null,
+        "value_shape": [
+          9,
+          16,
+          576,
+          64
+        ],
+        "selected_backend": "math",
+        "call_count": 3584
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          16,
+          5184,
+          64
+        ],
+        "query_shape": [
+          1,
+          16,
+          5184,
+          64
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          16,
+          5184,
+          64
+        ],
+        "selected_backend": "math",
+        "call_count": 512
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          8,
+          8,
+          32
+        ],
+        "query_shape": [
+          1,
+          8,
+          8,
+          32
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          8,
+          8,
+          32
+        ],
+        "selected_backend": "math",
+        "call_count": 256
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          8,
+          5184,
+          16
+        ],
+        "query_shape": [
+          1,
+          8,
+          8,
+          16
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          8,
+          5184,
+          16
+        ],
+        "selected_backend": "math",
+        "call_count": 384
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          8,
+          8,
+          16
+        ],
+        "query_shape": [
+          1,
+          8,
+          5184,
+          16
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          8,
+          8,
+          16
+        ],
+        "selected_backend": "math",
+        "call_count": 256
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 508
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          5188,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          5188,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          10376,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          10376,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          15564,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          15564,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          20752,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          20752,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          25940,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          25940,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          31128,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          31128,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36316,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36316,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36320,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36320,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36324,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36324,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36328,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36328,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36332,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36332,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36336,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36336,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36340,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36340,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36344,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36344,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36348,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36348,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 4
+      },
+      {
+        "device": "cuda:0",
+        "dropout_p": 0.0,
+        "dtype": "torch.bfloat16",
+        "enable_gqa": false,
+        "has_mask": false,
+        "is_causal": false,
+        "key_shape": [
+          1,
+          1,
+          36352,
+          256
+        ],
+        "query_shape": [
+          1,
+          1,
+          5184,
+          256
+        ],
+        "scale": null,
+        "value_shape": [
+          1,
+          1,
+          36352,
+          256
+        ],
+        "selected_backend": "math",
+        "call_count": 448
+      }
+    ]
+  },
+  "torch_memory": {
+    "max_memory_allocated_mib": 8553.47998046875,
+    "max_memory_reserved_mib": 9052.0,
+    "memory_allocated_mib": 4678.75732421875,
+    "memory_reserved_mib": 9052.0
+  },
+  "retained_state": {
+    "offload_video_to_cpu": true,
+    "offload_state_to_cpu": false,
+    "storage_device": "cuda",
+    "conditioning_outputs": 1,
+    "non_conditioning_outputs": 127,
+    "frames_already_tracked": 128,
+    "cached_features": 1,
+    "retention": "unbounded per-frame tracker outputs in output_dict; streamed masks are hashed and discarded by the harness"
+  },
+  "propagation_fps": 0.425278530229749,
+  "end_to_end_fps": 0.394201364602203,
+  "telemetry": {
+    "sample_count": 308,
+    "peak_process_rss_mib": 14107.789,
+    "peak_gpu_memory_used_mib": 11541.0,
+    "peak_torch_allocated_mib": 6373.18,
+    "peak_torch_reserved_mib": 9052.0,
+    "mean_propagation_gpu_utilization_percent": 99.72887323943662,
+    "minimum_propagation_gpu_clock_mhz": 855.0,
+    "maximum_propagation_gpu_clock_mhz": 1440.0,
+    "peak_propagation_gpu_temperature_c": 76.0,
+    "observed_propagation_pstates": [
+      "P0"
+    ],
+    "peak_gpu_temperature_c": 76.0,
+    "minimum_gpu_clock_mhz": 300.0,
+    "maximum_gpu_clock_mhz": 1860.0,
+    "observed_pstates": [
+      "P0",
+      "P5",
+      "P8"
+    ]
+  }
+}
