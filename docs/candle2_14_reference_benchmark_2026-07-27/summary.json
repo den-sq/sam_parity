@@ -1,0 +1,98 @@
+{
+  "benchmark": "CANDLE-2.14 Facebook SAM3 reference benchmark",
+  "date": "2026-07-27",
+  "reference_commit": "84cc43bca4347b772f17d1078a1ddb4c054655c2",
+  "checkpoint_sha256": "6e40bbaa739ac44e3e47dc6355ef6dedc560a30411377ad891f8af9e6df0dbd6",
+  "gpu": "NVIDIA Quadro RTX 5000 with Max-Q Design, 16384 MiB, compute capability 7.5",
+  "driver": "581.60",
+  "compile": false,
+  "runs": {
+    "default_32": {
+      "status": "completed",
+      "propagation_fps": 0.4398411561,
+      "end_to_end_fps": 0.32447964,
+      "peak_gpu_memory_used_mib": 11658.0,
+      "peak_process_rss_mib": 13774.289,
+      "selected_sdpa_backend": "math",
+      "output_sha256": "0f86cd2a99927529eb806d5fa1a0980acdd2c207cba02a38894d032ebc1a88de"
+    },
+    "default_128": {
+      "status": "completed",
+      "propagation_fps": 0.4252785302,
+      "end_to_end_fps": 0.394201365,
+      "peak_gpu_memory_used_mib": 11541.0,
+      "peak_process_rss_mib": 14107.789,
+      "selected_sdpa_backend": "math",
+      "output_sha256": "11603ea429ee01fc6cbdb17c9d0ccdaebaa69477353776d813040bc7bdde7e18"
+    },
+    "default_512": {
+      "status": "completed",
+      "propagation_fps": 0.41724618616214193,
+      "end_to_end_fps": 0.409211864,
+      "peak_gpu_memory_used_mib": 11978.0,
+      "peak_process_rss_mib": 14091.953,
+      "selected_sdpa_backend": "math",
+      "output_sha256": "79a1f005be074bd59b47882dcdcdc05cb40c4e04ccc281f19e66e75cbb2f6df9"
+    },
+    "default_4901": {
+      "status": "host_memory_infeasible",
+      "frames_loaded_at_least": 3483,
+      "propagated_frames_at_least": 31,
+      "peak_gpu_memory_used_mib": 11460.0,
+      "peak_process_rss_mib": 63739.387,
+      "output_sha256": null,
+      "reason": "The upstream async CPU resized-frame cache exhausted host RAM and swap."
+    },
+    "f32_32": {
+      "status": "completed",
+      "propagation_fps": 0.7045272053,
+      "end_to_end_fps": 0.427743125,
+      "peak_gpu_memory_used_mib": 7165.0,
+      "peak_process_rss_mib": 13843.117,
+      "selected_sdpa_backend": "efficient_attention",
+      "output_sha256": "e82578d6ec996b35a3676b401024b6872490c8f1afe4ca7e69193c9d1bd47034"
+    },
+    "f32_128": {
+      "status": "completed",
+      "propagation_fps": 0.6299424275,
+      "end_to_end_fps": 0.569142793,
+      "peak_gpu_memory_used_mib": 7283.0,
+      "peak_process_rss_mib": 14106.953,
+      "selected_sdpa_backend": "efficient_attention",
+      "output_sha256": "13a26c38436d7cb4f48f25c8bddf64e2f24c309368b34a16bfebfaa2f4679a8d"
+    },
+    "f32_512": {
+      "status": "completed",
+      "propagation_fps": 0.6166712709344839,
+      "end_to_end_fps": 0.5997406057326071,
+      "peak_gpu_memory_used_mib": 7661.0,
+      "peak_process_rss_mib": 14123.621,
+      "selected_sdpa_backend": "efficient_attention",
+      "output_sha256": "649473799daec339ea0d390b97d239ef6a4ee1000635fc4ce405eb903c10fb1e"
+    }
+  },
+  "full_stack_projections": {
+    "frame_count": 4901,
+    "facebook_default_hours": 3.262795284987585,
+    "facebook_forced_f32_hours": 2.2076411745692055,
+    "candle_candidate_hours": 6.362462793678093
+  },
+  "candle_candidate_comparison_at_512_frames": {
+    "candle_propagation_fps": 0.213972,
+    "facebook_default_speedup_over_candle": 1.9500036741355968,
+    "facebook_forced_f32_speedup_over_candle": 2.882018539502757
+  },
+  "diagnostic_ablations": {
+    "facebook_f32_math_only_32": {
+      "status": "completed",
+      "propagation_fps": 0.7030340447556792,
+      "automatic_policy_propagation_fps": 0.7045272053,
+      "throughput_change_percent": -0.21193795400491489,
+      "peak_gpu_memory_used_mib": 10443.0,
+      "automatic_policy_peak_gpu_memory_used_mib": 7165.0,
+      "selected_policy": "math only; flash, memory-efficient, and cuDNN SDPA disabled globally",
+      "output_sha256": "1f5c02b36290ed0856015ea0526be770add80dd8edb2772a7d283962312160e4",
+      "disposition": "Attention backend selection does not explain the Facebook/Candle F32 throughput gap."
+    }
+  }
+}

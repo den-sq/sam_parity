@@ -201,6 +201,9 @@ chkpts/
 .codex
 sam_parity_full_all.txt
 sam_parity_full_all_error.txt
+*.nsys-rep
+docs/**/profiles/*.sqlite
+docs/**/profiles/*.stats.txt
 
 # Cursor
 #  Cursor is an AI-powered code editor. `.cursorignore` specifies files/directories to

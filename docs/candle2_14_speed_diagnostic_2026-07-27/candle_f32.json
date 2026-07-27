@@ -1,0 +1,80 @@
+{
+  "schema_version": 1,
+  "framework": "candle",
+  "status": "completed",
+  "checkpoint": "/volume/sam3-segmentation/chkpts/medical_sam3.pt",
+  "frame": "/frames/000001.jpg",
+  "seed_frame": "/frames/000000.jpg",
+  "candle_revision": "32882747726e4803af494a6e67f47098f45c9893",
+  "device": "Cuda(CudaDevice(DeviceId(1)))",
+  "dtype": "F32",
+  "warmup": 1,
+  "samples": 3,
+  "num_frames": 32,
+  "model_startup_seconds": 26.733525321,
+  "stages": {
+    "image_encoder": {
+      "description": "image backbone and neck only",
+      "samples_ms": [
+        3596.780598,
+        3635.7305530000003,
+        3572.639674
+      ],
+      "sample_count": 3,
+      "mean_ms": 3601.716941666667,
+      "median_ms": 3596.780598,
+      "minimum_ms": 3572.639674,
+      "maximum_ms": 3635.7305530000003
+    },
+    "tracker_base": {
+      "description": "SAM tracker head without prior history or new-memory encoding",
+      "samples_ms": [
+        27.989638,
+        24.728192,
+        28.004701
+      ],
+      "sample_count": 3,
+      "mean_ms": 26.907510333333335,
+      "median_ms": 27.989638,
+      "minimum_ms": 24.728192,
+      "maximum_ms": 28.004701
+    },
+    "tracker_with_history": {
+      "description": "tracker head with one prior conditioning state, without new-memory encoding",
+      "samples_ms": [
+        110.71209,
+        112.40546,
+        128.48125399999998
+      ],
+      "sample_count": 3,
+      "mean_ms": 117.19960133333332,
+      "median_ms": 112.40546,
+      "minimum_ms": 110.71209,
+      "maximum_ms": 128.48125399999998
+    },
+    "tracker_full": {
+      "description": "tracker head with one prior conditioning state and new-memory encoding",
+      "samples_ms": [
+        181.407552,
+        161.426703,
+        229.805857
+      ],
+      "sample_count": 3,
+      "mean_ms": 190.88003733333335,
+      "median_ms": 181.407552,
+      "minimum_ms": 161.426703,
+      "maximum_ms": 229.805857
+    }
+  },
+  "derived": {
+    "previous_memory_conditioning_increment_ms": 84.415822,
+    "new_memory_encoder_increment_ms": 69.002092,
+    "estimated_full_frame_ms": 3778.18815,
+    "estimated_full_frame_fps": 0.26467713102112184
+  },
+  "interpretation": {
+    "new_memory_encoder_increment": "tracker_full median minus tracker_with_history median",
+    "previous_memory_conditioning_increment": "tracker_with_history median minus tracker_base median",
+    "tracker_base": "SAM tracker head without previous-frame history"
+  }
+}

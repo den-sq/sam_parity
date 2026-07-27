@@ -105,6 +105,35 @@ Run the Python full-parity suite against an installed upstream `sam3` package:
 python -m pytest -m full_parity python/python_debug/sam3_debug/tests -q
 ```
 
+Run the matched Facebook-versus-Candle performance diagnostic:
+
+```bash
+sam3-speed-diagnostic \
+  --checkpoint "$SAM3_CHECKPOINT" \
+  --frames-dir /path/to/prepared-jpegs \
+  --output /tmp/facebook-speed.json
+
+cargo run --release --features cuda --bin sam3_speed_diagnostic -- \
+  --checkpoint "$SAM3_CHECKPOINT" \
+  --seed-frame /path/to/prepared-jpegs/000000.jpg \
+  --frame /path/to/prepared-jpegs/000001.jpg \
+  --output /tmp/candle-speed.json
+
+sam3-compare-speed-diagnostics \
+  --candle /tmp/candle-speed.json \
+  --facebook /tmp/facebook-speed.json \
+  --output /tmp/speed-comparison.json
+```
+
+The Python command requires the official `sam3` package and CUDA. The Rust
+command resolves Candle from the sibling `../candle_sam3` checkout. For
+single-iteration Nsight Systems captures of the matched image encoders, set
+`SAM3_CHECKPOINT` and `SAM3_PROFILE_FRAMES_DIR`, then run
+`scripts/profile_candle_image_encoder.sh` and
+`scripts/profile_facebook_image_encoder.sh`. See
+[the speed-discrepancy report](docs/CANDLE2_14_SPEED_DISCREPANCY_DIAGNOSTIC_2026-07-27.md)
+for the baseline measurements and exact qualification.
+
 Generate or validate bundle artifacts under `tests/reference-bundles`:
 
 ```bash

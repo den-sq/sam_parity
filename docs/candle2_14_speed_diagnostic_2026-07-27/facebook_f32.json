@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "framework": "facebook-pytorch",
+  "status": "completed",
+  "checkpoint": {
+    "path": "/volume/sam3-segmentation/chkpts/medical_sam3.pt",
+    "sha256": "6e40bbaa739ac44e3e47dc6355ef6dedc560a30411377ad891f8af9e6df0dbd6"
+  },
+  "frames_dir": "/tmp/sam3_issue48_reference_frames_32",
+  "target_frame": 1,
+  "warmup": 1,
+  "samples": 3,
+  "model_startup_seconds": 22.82721652201144,
+  "compute": {
+    "dtype": "torch.float32",
+    "upstream_autocast": {
+      "enabled": true,
+      "dtype": "torch.bfloat16"
+    },
+    "effective_autocast_enabled": false,
+    "compile": false
+  },
+  "environment": {
+    "captured_at_utc": "2026-07-27T21:01:03.275598+00:00",
+    "python": "3.12.12 | packaged by conda-forge | (main, Oct 22 2025, 23:25:55) [GCC 14.3.0]",
+    "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "torch_version": "2.7.0+cu126",
+    "torch_cuda_runtime": "12.6",
+    "cudnn_version": 90501,
+    "gpu": "Quadro RTX 5000 with Max-Q Design",
+    "gpu_total_memory_mib": 16383,
+    "gpu_compute_capability": "7.5",
+    "driver_version": "581.60",
+    "sam3": {
+      "commit": "84cc43bca4347b772f17d1078a1ddb4c054655c2",
+      "dirty": null,
+      "remote": null
+    },
+    "sdpa_configuration": {
+      "flash_enabled": true,
+      "flash_available_in_build": true,
+      "memory_efficient_enabled": true,
+      "math_enabled": true,
+      "cudnn_enabled": true
+    },
+    "torch_compile": {
+      "used": false,
+      "disposition": "disabled explicitly for the reference benchmark"
+    }
+  },
+  "stages": {
+    "image_encoder": {
+      "description": "image backbone and neck only",
+      "samples_ms": [
+        1165.3689529630356,
+        1148.505397955887,
+        1157.0876649930142
+      ],
+      "sample_count": 3,
+      "mean_ms": 1156.9873386373122,
+      "median_ms": 1157.0876649930142,
+      "minimum_ms": 1148.505397955887,
+      "maximum_ms": 1165.3689529630356,
+      "peak_allocated_mib": 4215.9326171875,
+      "peak_reserved_mib": 4516.0
+    },
+    "tracker_base": {
+      "description": "SAM tracker head without prior history or new-memory encoding",
+      "samples_ms": [
+        9.321818011812866,
+        8.942756976466626,
+        7.8872700105421245
+      ],
+      "sample_count": 3,
+      "mean_ms": 8.717281666273871,
+      "median_ms": 8.942756976466626,
+      "minimum_ms": 7.8872700105421245,
+      "maximum_ms": 9.321818011812866,
+      "peak_allocated_mib": 3744.92529296875,
+      "peak_reserved_mib": 4250.0
+    },
+    "tracker_with_history": {
+      "description": "tracker head with one prior conditioning state, without new-memory encoding",
+      "samples_ms": [
+        91.07418695930392,
+        86.86351298820227,
+        87.12556504178792
+      ],
+      "sample_count": 3,
+      "mean_ms": 88.35442166309804,
+      "median_ms": 87.12556504178792,
+      "minimum_ms": 86.86351298820227,
+      "maximum_ms": 91.07418695930392,
+      "peak_allocated_mib": 3805.0009765625,
+      "peak_reserved_mib": 4250.0
+    },
+    "tracker_full": {
+      "description": "tracker head with one prior conditioning state and new-memory encoding",
+      "samples_ms": [
+        94.35403801035136,
+        92.32053701998666,
+        92.1008869772777
+      ],
+      "sample_count": 3,
+      "mean_ms": 92.92515400253858,
+      "median_ms": 92.32053701998666,
+      "minimum_ms": 92.1008869772777,
+      "maximum_ms": 94.35403801035136,
+      "peak_allocated_mib": 3805.0009765625,
+      "peak_reserved_mib": 4252.0
+    }
+  },
+  "derived": {
+    "previous_memory_conditioning_increment_ms": 78.1828080653213,
+    "new_memory_encoder_increment_ms": 5.194971978198737,
+    "estimated_full_frame_ms": 1249.4082020130008,
+    "estimated_full_frame_fps": 0.8003789301117413
+  },
+  "interpretation": {
+    "tracker_base": "SAM tracker head without previous-frame history",
+    "previous_memory_conditioning_increment": "tracker_with_history median minus tracker_base median",
+    "new_memory_encoder_increment": "tracker_full median minus tracker_with_history median"
+  }
+}
