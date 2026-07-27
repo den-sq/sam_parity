@@ -12,6 +12,7 @@ candle-examples = { path = "../../../candle_sam3/candle-examples" }
 candle-nn = { path = "../../../candle_sam3/candle-nn" }
 candle-transformers = { path = "../../../candle_sam3/candle-transformers", features = ["sam3-parity-support"] }
 clap = { version = "4.2.4", features = ["derive"] }
+cudarc = { version = "0.19.8", optional = true, default-features = false, features = ["std", "driver", "dynamic-linking", "cuda-version-from-build-system"] }
 image = { version = "0.25.2", default-features = false, features = ["jpeg", "png"] }
 imageproc = { version = "0.26.0", default-features = false, features = ["text"] }
 intel-mkl-src = { version = "0.8.1", optional = true }
@@ -29,6 +30,7 @@ accelerate = [
     "candle-transformers/accelerate",
 ]
 cuda = [
+    "dep:cudarc",
     "candle/cuda",
     "candle-examples/cuda",
     "candle-nn/cuda",

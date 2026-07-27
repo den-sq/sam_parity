@@ -2959,6 +2959,7 @@ dependencies = [
  "candle-nn",
  "candle-transformers",
  "clap",
+ "cudarc 0.19.8",
  "image",
  "imageproc",
  "intel-mkl-src",

@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "status": "completed",
+  "candle_framework": "candle",
+  "facebook_framework": "facebook-pytorch",
+  "estimated_full_frame": {
+    "candle_ms": 3778.18815,
+    "facebook_ms": 1249.4082020130008,
+    "candle_over_facebook": 3.0239821892578593,
+    "gap_ms": 2528.779947986999
+  },
+  "components": {
+    "image_encoder": {
+      "candle_median_ms": 3596.780598,
+      "facebook_median_ms": 1157.0876649930142,
+      "candle_over_facebook": 3.1084771766378783,
+      "gap_ms": 2439.6929330069856,
+      "share_of_total_gap_percent": 96.47707523737168
+    },
+    "tracker_base": {
+      "candle_median_ms": 27.989638,
+      "facebook_median_ms": 8.942756976466626,
+      "candle_over_facebook": 3.1298667819841604,
+      "gap_ms": 19.046881023533373,
+      "share_of_total_gap_percent": 0.753204367928312
+    },
+    "previous_memory_conditioning": {
+      "candle_median_ms": 84.415822,
+      "facebook_median_ms": 78.1828080653213,
+      "candle_over_facebook": 1.0797235874346065,
+      "gap_ms": 6.233013934678709,
+      "share_of_total_gap_percent": 0.24648304964773288
+    },
+    "new_memory_encoder": {
+      "candle_median_ms": 69.002092,
+      "facebook_median_ms": 5.194971978198737,
+      "candle_over_facebook": 13.28247626543026,
+      "gap_ms": 63.80712002180127,
+      "share_of_total_gap_percent": 2.5232373450522676
+    }
+  },
+  "ranked_gap_sources": [
+    "image_encoder",
+    "new_memory_encoder",
+    "tracker_base",
+    "previous_memory_conditioning"
+  ],
+  "primary_gap_source": "image_encoder"
+}
