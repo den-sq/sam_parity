@@ -2,7 +2,82 @@
 
 Tracking issue: <https://github.com/den-sq/sam_parity/issues/35>
 
-## Candidate and ancestry
+Last updated: 2026-08-05
+
+## Current production candidate freeze — 2026-08-05
+
+The original CANDLE-2.9 candidate below remains the historical certification
+baseline. The production release has since incorporated the accepted CUDA
+performance work, so the following exact stack supersedes that baseline as the
+candidate for the next performance measurement:
+
+- Candle: `c0400c6513c21655828bb92633cc190a3501a6f6`
+- Performance implementation anchor: `ff48ac5102c3d9da8638110d5b8da5141f5d52bb`
+  from <https://github.com/den-sq/candle_sam3/pull/13>
+- Plugin/release source: `e0d2d82e7687f940e5481ac2252bf626aae1be1f`
+- Plugin release: `ChengLabResearch/ouroboros_autoseg_plugin@v0.4.0-beta.3`
+- Production backend image:
+  `ghcr.io/chenglabresearch/ouroboros-autoseg-backend@sha256:238346625628119a310dce102f813a4386011a3265d9e29775a7a3449fde49ce`
+- Compiled Candle features: `cuda,cudnn`
+- Compute / retained dtype: F32 / F32
+- State profile: bounded GPU resident
+- Feature cache entries: 1
+- Non-conditioning tracker-state limit: 32
+- Hotstart delay: 0
+- Trim past non-conditioning memory: enabled
+- Target: NVIDIA Quadro RTX 5000 Max-Q, compute capability 7.5,
+  16,384 MiB, driver `581.60`
+
+The current Candle SHA descends both the original accepted candidate
+`71690361a0e4eb839cfc22a52fcdf5cfbf047f0a` and the performance implementation
+anchor. The current plugin SHA descends the original plugin candidate
+`7438668043d5021d016e5e0402012657dab69309`. The released image was built from
+the current plugin SHA with the exact Candle SHA and `cuda,cudnn` features
+above.
+
+This is an exact candidate freeze, not a current end-to-end performance claim.
+Do not change a revision, image digest, build feature, dtype, state profile, or
+runtime control during the comparison. Any changed value defines a distinct
+candidate and must be reported separately.
+
+### Current performance evidence and missing test
+
+The historical `0.213972 fps` 512-frame Candle result predates the cuDNN
+transposed-convolution route, fused F32/SM75 attention, fused F32 RoPE, and
+encoder layout reuse now in the production image. It remains evidence for its
+recorded historical revision and F32/BF16-retained configuration; it is not a
+measurement of the frozen production candidate above.
+
+The matched encoder diagnostic at the production optimization anchor records:
+
+| Encoder measurement | Pre-optimization Candle | Current Candle | Facebook F32 |
+|---|---:|---:|---:|
+| Captured wall time | 3,585.822 ms | 1,341.011 ms | 1,205.516 ms |
+| Summed GPU kernel time | 3,495.453 ms | 1,323.803 ms | 1,205.029 ms |
+| Kernel launches | 1,225 | 659 | 579 |
+
+The former dominant transposed-convolution and attention gaps are closed in
+that diagnostic. The remaining measured encoder residual is primarily ordinary
+linear-layer bias/layout plumbing: 215 standalone `badd_f32` kernels totaling
+180.383 ms and 82 `ucopy_f32` materializations totaling 66.712 ms. This stage
+evidence narrows any later optimization investigation, but it cannot be
+substituted for an end-to-end production measurement.
+
+<https://github.com/den-sq/sam_parity/issues/58> owns the required exact-SHA
+test. It must run the unchanged frozen production stack on the established
+32/128/512-frame ladder, capture end-to-end and propagation timing plus the
+specified GPU, memory, output, and state-retention evidence, and repeat the
+five-stage synchronized diagnostic. Results must be compared with both measured
+Facebook reference arms (`0.417246 fps` default BF16 autocast and `0.616671 fps`
+forced F32 at 512 frames) under a qualified hardware state. The old `0.68 fps`
+threshold remains retired. The resulting evidence, rather than the historical
+throughput figure or an extrapolation from encoder timing, will decide whether
+further optimization should be deferred.
+
+F16 remains excluded from this candidate. Its correctness/certification work is
+separate and does not alter the F32/F32 production freeze.
+
+## Original candidate and ancestry (historical)
 
 - Candle candidate: `71690361a0e4eb839cfc22a52fcdf5cfbf047f0a`
 - Plugin candidate: `7438668043d5021d016e5e0402012657dab69309`
@@ -191,16 +266,21 @@ Completed verification:
 
 ## Freeze disposition
 
-The proposed provisional freeze is Candle
+The original provisional freeze was Candle
 `71690361a0e4eb839cfc22a52fcdf5cfbf047f0a` plus plugin
-`7438668043d5021d016e5e0402012657dab69309`, selecting bounded GPU-resident F32
-compute and retained state. CPU offload and BF16 retained storage remain explicit
-fallback/benchmark controls; their packed paths are runnable on the SM75 target.
-The execution-time target is delegated to
-<https://github.com/den-sq/sam_parity/issues/48> and
-<https://github.com/den-sq/sam_parity/issues/49>, and no material throughput
-speedup is claimed here. With that delegation, the explicit attribution above,
-and the Turing AC8 gap closed, this record supports closing
-<https://github.com/den-sq/sam_parity/issues/35> and proceeding to
-<https://github.com/den-sq/sam_parity/issues/36> against the unchanged frozen
-SHAs.
+`7438668043d5021d016e5e0402012657dab69309`. It remains the historical CANDLE-2.9
+certification baseline.
+
+The current production performance candidate is the exact Candle, plugin,
+release, backend-image digest, feature set, and bounded GPU-resident F32/F32
+configuration recorded in **Current production candidate freeze — 2026-08-05**.
+It is frozen provisionally pending the unchanged-candidate 32/128/512-frame
+measurement and refreshed five-stage diagnostic in
+<https://github.com/den-sq/sam_parity/issues/58>. No current-production
+end-to-end throughput is claimed before that evidence is recorded.
+
+CPU offload and BF16 retained storage remain explicit fallback/benchmark
+controls; F16 remains unselected. After the frozen candidate is measured and
+accepted, the full biological-stack acceptance remains
+<https://github.com/den-sq/sam_parity/issues/36>, while user-specific target
+disposition remains <https://github.com/den-sq/sam_parity/issues/49>.
