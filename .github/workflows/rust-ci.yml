@@ -1,9 +1,8 @@
 name: Rust CI
 
 env:
-  # den-sq/candle_sam3#10 merged the provisionally accepted F16 implementation at this exact main revision.
-  CANDLE_SAM3_BRANCH: main
-  CANDLE_SAM3_SHA: 32882747726e4803af494a6e67f47098f45c9893
+  # Fetch the frozen production candidate directly; unrelated movement on Candle main must not break this workflow.
+  CANDLE_SAM3_SHA: c0400c6513c21655828bb92633cc190a3501a6f6
 
 on:
   pull_request:
@@ -19,7 +18,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Clone Candle SAM3 path dependency
         run: |
-          git clone --depth 1 --branch "$CANDLE_SAM3_BRANCH" https://github.com/den-sq/candle_sam3 ../candle_sam3
+          git init ../candle_sam3
+          git -C ../candle_sam3 remote add origin https://github.com/den-sq/candle_sam3
+          git -C ../candle_sam3 fetch --depth 1 origin "$CANDLE_SAM3_SHA"
+          git -C ../candle_sam3 checkout --detach FETCH_HEAD
           test "$(git -C ../candle_sam3 rev-parse HEAD)" = "$CANDLE_SAM3_SHA"
       - uses: Swatinem/rust-cache@v2
       - name: Cargo check
@@ -34,7 +36,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Clone Candle SAM3 path dependency
         run: |
-          git clone --depth 1 --branch "$CANDLE_SAM3_BRANCH" https://github.com/den-sq/candle_sam3 ../candle_sam3
+          git init ../candle_sam3
+          git -C ../candle_sam3 remote add origin https://github.com/den-sq/candle_sam3
+          git -C ../candle_sam3 fetch --depth 1 origin "$CANDLE_SAM3_SHA"
+          git -C ../candle_sam3 checkout --detach FETCH_HEAD
           test "$(git -C ../candle_sam3 rev-parse HEAD)" = "$CANDLE_SAM3_SHA"
       - uses: Swatinem/rust-cache@v2
       - name: Cargo test
@@ -49,7 +54,10 @@ jobs:
           components: rustfmt
       - name: Clone Candle SAM3 path dependency
         run: |
-          git clone --depth 1 --branch "$CANDLE_SAM3_BRANCH" https://github.com/den-sq/candle_sam3 ../candle_sam3
+          git init ../candle_sam3
+          git -C ../candle_sam3 remote add origin https://github.com/den-sq/candle_sam3
+          git -C ../candle_sam3 fetch --depth 1 origin "$CANDLE_SAM3_SHA"
+          git -C ../candle_sam3 checkout --detach FETCH_HEAD
           test "$(git -C ../candle_sam3 rev-parse HEAD)" = "$CANDLE_SAM3_SHA"
       - name: Rustfmt
         run: cargo fmt --package sam3-parity-lib --package sam3-parity-cli -- --check
